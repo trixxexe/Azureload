@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
@@ -182,7 +183,7 @@ class DownloadJobRunner(
         val maxAttempts = 6
 
         while (attempt < maxAttempts) {
-            ensureActive()
+            currentCoroutineContext().ensureActive()
             try {
                 repository.updateChunkProgress(currentChunk.id, currentChunk.downloadedBytes, ChunkStatus.DOWNLOADING)
                 downloadChunkStream(download, currentChunk, stagingFile)
@@ -244,7 +245,7 @@ class DownloadJobRunner(
                 var lastDbPersist = System.currentTimeMillis()
 
                 while (input.read(buffer).also { bytesRead = it } != -1) {
-                    ensureActive()
+                    currentCoroutineContext().ensureActive()
                     stagingFileManager.writeChunkData(stagingFile, currentWriteOffset, buffer, bytesRead)
                     currentWriteOffset += bytesRead
                     totalChunkDownloaded += bytesRead
@@ -303,7 +304,7 @@ class DownloadJobRunner(
                 var lastDbPersist = System.currentTimeMillis()
 
                 while (input.read(buffer).also { bytesRead = it } != -1) {
-                    ensureActive()
+                    currentCoroutineContext().ensureActive()
                     stagingFileManager.writeChunkData(stagingFile, currentWriteOffset, buffer, bytesRead)
                     currentWriteOffset += bytesRead
 

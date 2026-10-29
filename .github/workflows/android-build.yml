@@ -145,6 +145,7 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p ci-artifacts/apk ci-artifacts/reports
+          touch ci-artifacts/reports/.gitkeep
           find app/build/outputs/apk -type f -name '*.apk' -exec cp {} ci-artifacts/apk/ \; || true
           find app/build/reports -type f \( -name '*.html' -o -name '*.xml' \) -exec cp --parents {} ci-artifacts/reports/ \; || true
           find app/build/test-results -type f -name '*.xml' -exec cp --parents {} ci-artifacts/reports/ \; || true
