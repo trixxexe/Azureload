@@ -54,19 +54,19 @@ class CapabilityDetectorServerTest {
 
     @Test
     fun testDetectsSingleStreamWhenServerReturns200() = runBlocking {
+        val payload = "dummy content"
         server.enqueue(
             MockResponse()
                 .setResponseCode(200)
-                .setHeader("Content-Length", "5242880")
                 .setHeader("Accept-Ranges", "bytes")
                 .setHeader("Content-Type", "application/zip")
-                .setBody("dummy content")
+                .setBody(payload)
         )
 
         val capability = detector.detect(server.url("/archive.zip").toString())
 
         assertFalse(capability.supportsRange)
-        assertEquals(5242880L, capability.contentLength)
+        assertEquals(payload.length.toLong(), capability.contentLength)
         assertEquals(200, capability.responseCode)
     }
 

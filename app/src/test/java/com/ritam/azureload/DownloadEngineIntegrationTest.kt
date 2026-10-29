@@ -172,11 +172,19 @@ class DownloadEngineIntegrationTest {
         val totalSize = 100 * 1024 // 100 KB
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
-                // Send only 10 KB then close connection prematurely
+                val range = request.getHeader("Range")
+                if (range == "bytes=0-0") {
+                    // Initial capability probe returns total size = 100KB
+                    return MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Content-Range", "bytes 0-0/$totalSize")
+                        .setHeader("Content-Length", "1")
+                        .setBody("x")
+                }
+                // Download transfer streams only 10 KB and ends (short read)
                 val shortPayload = ByteArray(10 * 1024)
                 return MockResponse()
                     .setResponseCode(200)
-                    .setHeader("Content-Length", totalSize.toString())
                     .setBody(Buffer().write(shortPayload))
             }
         }
