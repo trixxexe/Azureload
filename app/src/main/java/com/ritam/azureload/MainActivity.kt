@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
 
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+    private val sharedUrlState = mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -69,8 +70,11 @@ class MainActivity : ComponentActivity() {
             }
         } catch (_: Exception) {}
 
-        // Extract candidate URL from share intent if launched via Send intent
-        val sharedUrl = extractUrlFromIntent(intent)
+        // Extract candidate URL from share intent if launched via Send or View intent
+        val initialUrl = extractUrlFromIntent(intent)
+        if (!initialUrl.isNullOrBlank()) {
+            sharedUrlState.value = initialUrl
+        }
 
         setContent {
             AzureloadTheme {
@@ -96,11 +100,14 @@ class MainActivity : ComponentActivity() {
                     val speeds by coordinator.speeds.collectAsState()
                     val defaultConcurrency by settingsManager.defaultConcurrencyFlow.collectAsState()
                     val coroutineScope = rememberCoroutineScope()
+                    val sharedUrl by sharedUrlState
 
                     // If shared from another app, navigate to Add screen directly
                     LaunchedEffect(sharedUrl) {
-                        if (!sharedUrl.isNullOrBlank()) {
-                            navController.navigate(Screen.Add.createRoute(url = sharedUrl))
+                        val target = sharedUrl
+                        if (!target.isNullOrBlank()) {
+                            navController.navigate(Screen.Add.createRoute(url = target))
+                            sharedUrlState.value = null
                         }
                     }
 
@@ -139,13 +146,13 @@ class MainActivity : ComponentActivity() {
                                 try { URLDecoder.decode(it, "UTF-8") } catch (_: Exception) { it }
                             }
 
-                            val initialUrl = decodeSafely(backStackEntry.arguments?.getString("url"))
+                            val initialUrlArg = decodeSafely(backStackEntry.arguments?.getString("url"))
                             val initialCookie = decodeSafely(backStackEntry.arguments?.getString("cookie"))
                             val initialUserAgent = decodeSafely(backStackEntry.arguments?.getString("userAgent"))
                             val initialFileName = decodeSafely(backStackEntry.arguments?.getString("fileName"))
 
                             AddDownloadScreen(
-                                initialUrl = initialUrl,
+                                initialUrl = initialUrlArg,
                                 initialCookie = initialCookie,
                                 initialUserAgent = initialUserAgent,
                                 initialFileName = initialFileName,
@@ -240,6 +247,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        val extracted = extractUrlFromIntent(intent)
+        if (!extracted.isNullOrBlank()) {
+            sharedUrlState.value = extracted
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         networkCallback?.let {
@@ -249,10 +265,18 @@ class MainActivity : ComponentActivity() {
 
     private fun extractUrlFromIntent(intent: Intent?): String? {
         if (intent == null) return null
-        if (Intent.ACTION_SEND == intent.action && intent.type == "text/plain") {
-            val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return null
-            val matcher = Regex("https?://[\\w\\d:#@%/;$()~_?\\+-=\\\\\\.&]+").find(text)
-            return matcher?.value
+        if (Intent.ACTION_SEND == intent.action) {
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+                ?: intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
+            if (!text.isNullOrBlank()) {
+                val matcher = Regex("https?://[\\w\\d:#@%/;$()~_?\\+-=\\\\\\.&]+").find(text)
+                return matcher?.value
+            }
+        } else if (Intent.ACTION_VIEW == intent.action) {
+            val data = intent.dataString
+            if (!data.isNullOrBlank() && (data.startsWith("http://") || data.startsWith("https://"))) {
+                return data
+            }
         }
         return null
     }

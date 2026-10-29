@@ -29,6 +29,7 @@ class DownloadCoordinator(
     private val tag = "DownloadCoordinator"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val activeJobs = ConcurrentHashMap<Long, Job>()
+    private val lastServiceUpdate = ConcurrentHashMap<Long, Long>()
 
     private val _speeds = MutableStateFlow<Map<Long, Long>>(emptyMap())
     val speeds: StateFlow<Map<Long, Long>> = _speeds.asStateFlow()
@@ -36,6 +37,31 @@ class DownloadCoordinator(
     init {
         scope.launch {
             recoverPendingDownloads()
+        }
+
+        // React dynamically to Wi-Fi only preference changes
+        scope.launch {
+            settingsManager.wifiOnlyFlow.collect { wifiOnly ->
+                if (wifiOnly && !SettingsManager.isWifiConnected(context)) {
+                    Log.i(tag, "Wi-Fi only enabled while on cellular data: pausing active downloads.")
+                    for ((id, job) in activeJobs) {
+                        job.cancel()
+                        repository.updateDownloadStatus(id, DownloadStatus.PAUSED, "Waiting for Wi-Fi connection")
+                    }
+                    activeJobs.clear()
+                    _speeds.value = emptyMap()
+                    DownloadForegroundService.stopService(context)
+                } else {
+                    checkNextQueuedDownload()
+                }
+            }
+        }
+
+        // React dynamically to max concurrent active transfers changes
+        scope.launch {
+            settingsManager.maxActiveTransfersFlow.collect {
+                checkNextQueuedDownload()
+            }
         }
     }
 
@@ -47,6 +73,7 @@ class DownloadCoordinator(
                 repository.updateDownloadStatus(item.id, DownloadStatus.PAUSED)
             }
         }
+        checkNextQueuedDownload()
     }
 
     fun startDownload(downloadId: Long) {
@@ -82,9 +109,14 @@ class DownloadCoordinator(
                     downloadId = downloadId,
                     repository = repository,
                     stagingFileManager = stagingFileManager,
-                    onProgress = { id, downloaded, speed ->
+                    onProgress = { id, downloaded, total, speed ->
                         _speeds.value = _speeds.value.toMutableMap().apply { put(id, speed) }
-                        DownloadForegroundService.updateProgress(context, id, downloaded, speed)
+                        val now = System.currentTimeMillis()
+                        val lastUpdate = lastServiceUpdate[id] ?: 0L
+                        if (now - lastUpdate >= 750L) {
+                            lastServiceUpdate[id] = now
+                            DownloadForegroundService.updateProgress(context, id, downloaded, total, speed)
+                        }
                     }
                 )
                 runner.run()
@@ -94,6 +126,7 @@ class DownloadCoordinator(
                 Log.e(tag, "Error running download $downloadId", e)
             } finally {
                 activeJobs.remove(downloadId)
+                lastServiceUpdate.remove(downloadId)
                 _speeds.value = _speeds.value.toMutableMap().apply { remove(downloadId) }
                 if (activeJobs.isEmpty()) {
                     DownloadForegroundService.stopService(context)
@@ -106,12 +139,19 @@ class DownloadCoordinator(
 
     private fun checkNextQueuedDownload() {
         scope.launch {
+            // Respect Wi-Fi only setting
+            if (settingsManager.getWifiOnly() && !SettingsManager.isWifiConnected(context)) {
+                return@launch
+            }
+
             val maxActive = settingsManager.getMaxActiveTransfers()
-            if (activeJobs.size < maxActive) {
+            while (activeJobs.size < maxActive) {
                 val pending = repository.getActiveOrPendingDownloads()
                 val nextQueued = pending.firstOrNull { it.status == DownloadStatus.QUEUED && !activeJobs.containsKey(it.id) }
                 if (nextQueued != null) {
                     startDownload(nextQueued.id)
+                } else {
+                    break
                 }
             }
         }
@@ -122,6 +162,7 @@ class DownloadCoordinator(
         if (job != null) {
             job.cancel()
             activeJobs.remove(downloadId)
+            lastServiceUpdate.remove(downloadId)
         }
         scope.launch {
             repository.updateDownloadStatus(downloadId, DownloadStatus.PAUSED)

@@ -40,17 +40,17 @@ fun AddDownloadScreen(
     val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
-    val prefilledHeaders = remember {
+    val prefilledHeaders = remember(initialCookie, initialUserAgent) {
         val list = mutableListOf<String>()
         if (!initialCookie.isNullOrBlank()) list.add("Cookie: $initialCookie")
         if (!initialUserAgent.isNullOrBlank()) list.add("User-Agent: $initialUserAgent")
         list.joinToString("\n")
     }
 
-    var url by remember { mutableStateOf(initialUrl.orEmpty()) }
-    var fileName by remember { mutableStateOf(initialFileName.orEmpty()) }
-    var concurrency by remember { mutableStateOf(defaultConcurrency.coerceIn(1, 16).toFloat()) }
-    var customHeadersText by remember { mutableStateOf(prefilledHeaders) }
+    var url by remember(initialUrl) { mutableStateOf(initialUrl.orEmpty()) }
+    var fileName by remember(initialFileName) { mutableStateOf(initialFileName.orEmpty()) }
+    var concurrency by remember(defaultConcurrency) { mutableStateOf(defaultConcurrency.coerceIn(1, 16).toFloat()) }
+    var customHeadersText by remember(prefilledHeaders) { mutableStateOf(prefilledHeaders) }
     var expectedSha256 by remember { mutableStateOf("") }
 
     var isInspecting by remember { mutableStateOf(false) }

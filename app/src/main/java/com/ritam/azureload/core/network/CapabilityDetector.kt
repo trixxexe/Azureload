@@ -7,6 +7,9 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.net.URLDecoder
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 import java.util.regex.Pattern
 
 class CapabilityDetector(
@@ -22,7 +25,9 @@ class CapabilityDetector(
             .header("User-Agent", "Azureload/1.0 (Android; Mobile)")
 
         for ((key, value) in customHeaders) {
-            requestBuilder.header(key, value)
+            if (!key.equals("Range", ignoreCase = true)) {
+                requestBuilder.header(key, value)
+            }
         }
 
         val request = requestBuilder.build()
@@ -33,10 +38,10 @@ class CapabilityDetector(
 
             // Handle HTTP error codes
             if (code == 429) {
-                val retryAfterSec = response.header("Retry-After")?.toLongOrNull()
+                val retryAfterSec = parseRetryAfter(response.header("Retry-After"))
                 throw TransientDownloadException("Server returned HTTP 429 Too Many Requests", statusCode = 429, retryAfterSeconds = retryAfterSec)
             } else if (code in 500..599) {
-                val retryAfterSec = response.header("Retry-After")?.toLongOrNull()
+                val retryAfterSec = parseRetryAfter(response.header("Retry-After"))
                 throw TransientDownloadException("Server returned HTTP $code: ${response.message}", statusCode = code, retryAfterSeconds = retryAfterSec)
             } else if (code in 400..499 && code != 416) {
                 throw FatalDownloadException("Server returned HTTP $code: ${response.message}", statusCode = code)
@@ -64,7 +69,7 @@ class CapabilityDetector(
             // Determine total content length
             var totalLength: Long = -1L
             if (contentRange != null) {
-                // Format: bytes 0-0/146515 or bytes 0-0/*
+                // Format: bytes 0-0/146515 or bytes 0-0/* or bytes */0
                 val slashIdx = contentRange.lastIndexOf('/')
                 if (slashIdx != -1) {
                     val totalPart = contentRange.substring(slashIdx + 1).trim()
@@ -72,9 +77,9 @@ class CapabilityDetector(
                 }
             }
 
-            if (totalLength <= 0) {
+            if (totalLength < 0) {
                 val cl = response.header("Content-Length")?.toLongOrNull() ?: -1L
-                if (code == 200 && cl > 0) {
+                if (code == 200 && cl >= 0) {
                     totalLength = cl
                 }
             }
@@ -105,19 +110,64 @@ class CapabilityDetector(
     }
 
     companion object {
+        fun parseRetryAfter(raw: String?): Long? {
+            if (raw.isNullOrBlank()) return null
+            raw.trim().toLongOrNull()?.let { return it.coerceAtLeast(0) }
+            val formats = arrayOf(
+                "EEE, dd MMM yyyy HH:mm:ss zzz",
+                "EEEE, dd-MMM-yy HH:mm:ss zzz",
+                "EEE MMM d HH:mm:ss yyyy"
+            )
+            for (pattern in formats) {
+                try {
+                    val sdf = SimpleDateFormat(pattern, Locale.US)
+                    sdf.timeZone = TimeZone.getTimeZone("GMT")
+                    val date = sdf.parse(raw.trim())
+                    if (date != null) {
+                        val delaySec = (date.time - System.currentTimeMillis()) / 1000L
+                        return delaySec.coerceAtLeast(0)
+                    }
+                } catch (_: Exception) {}
+            }
+            return null
+        }
+
         fun extractFileName(contentDisposition: String?, url: String): String {
             if (!contentDisposition.isNullOrBlank()) {
-                // filename*=UTF-8''filename or filename="filename"
-                val utf8Pattern = Pattern.compile("filename\\*=(?:UTF-8|utf-8)''([^;]+)")
+                // RFC 5987 / RFC 6266 filename*=UTF-8''...
+                val utf8Pattern = Pattern.compile("filename\\*=(?:UTF-8|utf-8)''([^;\\r\\n]+)")
                 val utf8Matcher = utf8Pattern.matcher(contentDisposition)
                 if (utf8Matcher.find()) {
-                    return URLDecoder.decode(utf8Matcher.group(1).orEmpty(), "UTF-8").trim('"', '\'')
+                    val raw = utf8Matcher.group(1).orEmpty().trim('"', '\'')
+                    try {
+                        return URLDecoder.decode(raw, "UTF-8")
+                    } catch (_: Exception) {
+                        return raw
+                    }
                 }
 
-                val standardPattern = Pattern.compile("filename=\"?([^\";]+)\"?")
-                val standardMatcher = standardPattern.matcher(contentDisposition)
-                if (standardMatcher.find()) {
-                    return standardMatcher.group(1).orEmpty().trim('"', '\'')
+                // Standard quoted filename="..."
+                val quotedPattern = Pattern.compile("filename=\"([^\"]+)\"")
+                val quotedMatcher = quotedPattern.matcher(contentDisposition)
+                if (quotedMatcher.find()) {
+                    val raw = quotedMatcher.group(1).orEmpty().trim()
+                    try {
+                        return URLDecoder.decode(raw, "UTF-8")
+                    } catch (_: Exception) {
+                        return raw
+                    }
+                }
+
+                // Standard unquoted filename=...
+                val unquotedPattern = Pattern.compile("filename=([^;\\s]+)")
+                val unquotedMatcher = unquotedPattern.matcher(contentDisposition)
+                if (unquotedMatcher.find()) {
+                    val raw = unquotedMatcher.group(1).orEmpty().trim('"', '\'')
+                    try {
+                        return URLDecoder.decode(raw, "UTF-8")
+                    } catch (_: Exception) {
+                        return raw
+                    }
                 }
             }
 

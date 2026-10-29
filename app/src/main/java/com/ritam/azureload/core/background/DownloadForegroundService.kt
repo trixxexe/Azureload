@@ -8,7 +8,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
-import com.ritam.azureload.R
+import java.util.Locale
 
 class DownloadForegroundService : Service() {
 
@@ -20,7 +20,7 @@ class DownloadForegroundService : Service() {
         val initialNotification = AzureloadNotificationManager.buildNotification(
             context = this,
             title = "Azureload active",
-            progressPercent = 0,
+            progressPercent = -1,
             speedText = "Preparing transfers..."
         )
 
@@ -50,15 +50,17 @@ class DownloadForegroundService : Service() {
 
         val downloadId = intent.getLongExtra(EXTRA_DOWNLOAD_ID, -1L)
         val downloaded = intent.getLongExtra(EXTRA_DOWNLOADED, 0L)
+        val total = intent.getLongExtra(EXTRA_TOTAL, -1L)
         val speed = intent.getLongExtra(EXTRA_SPEED, 0L)
 
         if (downloadId > 0) {
             val speedMb = speed.toDouble() / (1024.0 * 1024.0)
-            val speedText = if (speedMb >= 0.1) String.format("%.2f MB/s", speedMb) else String.format("%d KB/s", speed / 1024)
+            val speedText = if (speedMb >= 0.1) String.format(Locale.US, "%.2f MB/s", speedMb) else String.format(Locale.US, "%d KB/s", speed / 1024)
+            val progressPercent = if (total > 0) ((downloaded * 100) / total).toInt().coerceIn(0, 100) else -1
             val notification = AzureloadNotificationManager.buildNotification(
                 context = this,
                 title = "Downloading file...",
-                progressPercent = -1,
+                progressPercent = progressPercent,
                 speedText = speedText,
                 downloadId = downloadId
             )
@@ -75,6 +77,7 @@ class DownloadForegroundService : Service() {
         private const val ACTION_STOP = "com.ritam.azureload.ACTION_STOP_SERVICE"
         private const val EXTRA_DOWNLOAD_ID = "extra_download_id"
         private const val EXTRA_DOWNLOADED = "extra_downloaded"
+        private const val EXTRA_TOTAL = "extra_total"
         private const val EXTRA_SPEED = "extra_speed"
 
         fun startService(context: Context) {
@@ -86,11 +89,12 @@ class DownloadForegroundService : Service() {
             }
         }
 
-        fun updateProgress(context: Context, downloadId: Long, downloadedBytes: Long, speedBytesPerSec: Long) {
+        fun updateProgress(context: Context, downloadId: Long, downloadedBytes: Long, totalBytes: Long, speedBytesPerSec: Long) {
             val intent = Intent(context, DownloadForegroundService::class.java).apply {
                 action = ACTION_UPDATE
                 putExtra(EXTRA_DOWNLOAD_ID, downloadId)
                 putExtra(EXTRA_DOWNLOADED, downloadedBytes)
+                putExtra(EXTRA_TOTAL, totalBytes)
                 putExtra(EXTRA_SPEED, speedBytesPerSec)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

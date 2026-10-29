@@ -13,6 +13,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 class CapabilityDetectorServerTest {
 
@@ -104,6 +108,45 @@ class CapabilityDetectorServerTest {
             assertEquals(503, e.statusCode)
             assertEquals(45L, e.retryAfterSeconds)
         }
+    }
+
+    @Test
+    fun testParsesHttpDateRetryAfter() = runBlocking {
+        // Date 60 seconds into the future
+        val futureDate = Date(System.currentTimeMillis() + 60_000L)
+        val sdf = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("GMT")
+        }
+        val dateHeader = sdf.format(futureDate)
+
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(503)
+                .setHeader("Retry-After", dateHeader)
+                .setBody("Service Unavailable with HTTP date")
+        )
+
+        try {
+            detector.detect(server.url("/date-retry").toString())
+            fail("Expected TransientDownloadException")
+        } catch (e: TransientDownloadException) {
+            assertEquals(503, e.statusCode)
+            assertTrue("Expected retryAfterSeconds between 40 and 70, got ${e.retryAfterSeconds}", (e.retryAfterSeconds ?: 0L) in 40L..70L)
+        }
+    }
+
+    @Test
+    fun testZeroByteFileWith416RangeNotSatisfiable() = runBlocking {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(416)
+                .setHeader("Content-Range", "bytes */0")
+                .setHeader("Content-Type", "text/plain")
+        )
+
+        val capability = detector.detect(server.url("/empty.txt").toString())
+        assertFalse(capability.supportsRange)
+        assertEquals(0L, capability.contentLength)
     }
 
     @Test

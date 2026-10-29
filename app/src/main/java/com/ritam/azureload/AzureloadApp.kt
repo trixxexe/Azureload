@@ -2,9 +2,11 @@ package com.ritam.azureload
 
 import android.app.Application
 import com.ritam.azureload.core.background.AzureloadNotificationManager
+import com.ritam.azureload.core.background.DownloadRecoveryWorker
 import com.ritam.azureload.core.database.AzureloadDatabase
 import com.ritam.azureload.core.database.DownloadRepository
 import com.ritam.azureload.core.engine.DownloadCoordinator
+import com.ritam.azureload.core.settings.SettingsManager
 import com.ritam.azureload.core.storage.StagingFileManager
 
 class AzureloadApp : Application() {
@@ -18,7 +20,7 @@ class AzureloadApp : Application() {
     lateinit var stagingFileManager: StagingFileManager
         private set
 
-    lateinit var settingsManager: com.ritam.azureload.core.settings.SettingsManager
+    lateinit var settingsManager: SettingsManager
         private set
 
     lateinit var downloadCoordinator: DownloadCoordinator
@@ -29,9 +31,10 @@ class AzureloadApp : Application() {
         database = AzureloadDatabase.getInstance(this)
         repository = DownloadRepository(database.downloadDao(), database.chunkDao())
         stagingFileManager = StagingFileManager(this)
-        settingsManager = com.ritam.azureload.core.settings.SettingsManager(this)
+        settingsManager = SettingsManager(this)
         downloadCoordinator = DownloadCoordinator(this, repository, stagingFileManager, settingsManager)
 
         AzureloadNotificationManager.createNotificationChannel(this)
+        DownloadRecoveryWorker.schedule(this)
     }
 }

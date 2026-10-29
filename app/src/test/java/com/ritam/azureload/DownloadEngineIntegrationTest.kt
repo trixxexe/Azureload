@@ -26,6 +26,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 
 class DownloadEngineIntegrationTest {
@@ -306,5 +307,175 @@ class DownloadEngineIntegrationTest {
         assertEquals("\"v2-new-etag\"", item.eTag)
         val file = File(item.destinationPath)
         assertArrayEquals(newPayload, file.readBytes())
+    }
+
+    @Test
+    fun testSingleStreamTransientRetrySucceeds() = runBlocking {
+        val payload = "Transient Error Recovered Content".toByteArray()
+        val attempts = AtomicInteger(0)
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val range = request.getHeader("Range")
+                if (range == "bytes=0-0") {
+                    return MockResponse()
+                        .setResponseCode(200)
+                        .setHeader("Content-Length", payload.size.toString())
+                        .setBody(Buffer().write(payload))
+                }
+                val count = attempts.incrementAndGet()
+                if (count == 1) {
+                    // First attempt returns 503 transient failure
+                    return MockResponse()
+                        .setResponseCode(503)
+                        .setHeader("Retry-After", "1")
+                        .setBody("Service Temporarily Overloaded")
+                }
+                // Second attempt succeeds
+                return MockResponse()
+                    .setResponseCode(200)
+                    .setHeader("Content-Length", payload.size.toString())
+                    .setBody(Buffer().write(payload))
+            }
+        }
+
+        val url = server.url("/retry_stream.bin").toString()
+        val downloadId = repository.insertDownload(
+            DownloadItem(
+                url = url,
+                fileName = "retry_stream.bin",
+                concurrency = 1,
+                destinationPath = "",
+                stagingPath = "",
+                status = DownloadStatus.QUEUED
+            )
+        )
+
+        val runner = DownloadJobRunner(
+            downloadId = downloadId,
+            repository = repository,
+            stagingFileManager = stagingManager,
+            capabilityDetector = CapabilityDetector(client),
+            httpClient = client
+        )
+
+        runner.run()
+
+        val finalItem = repository.getDownloadById(downloadId)!!
+        assertEquals(DownloadStatus.COMPLETED, finalItem.status)
+        val destinationFile = File(finalItem.destinationPath)
+        assertTrue(destinationFile.exists())
+        assertArrayEquals(payload, destinationFile.readBytes())
+        assertTrue("Expected at least 2 requests (probe + fail + retry)", attempts.get() >= 2)
+    }
+
+    @Test
+    fun testDynamicStreamUnknownContentLength() = runBlocking {
+        val payload = "Dynamic Stream Payload Without Content-Length".toByteArray()
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                // Chunked transfer without Content-Length
+                return MockResponse()
+                    .setResponseCode(200)
+                    .setChunkedBody(Buffer().write(payload), 16)
+            }
+        }
+
+        val url = server.url("/dynamic.bin").toString()
+        val downloadId = repository.insertDownload(
+            DownloadItem(
+                url = url,
+                fileName = "dynamic.bin",
+                concurrency = 1,
+                destinationPath = "",
+                stagingPath = "",
+                status = DownloadStatus.QUEUED
+            )
+        )
+
+        val runner = DownloadJobRunner(
+            downloadId = downloadId,
+            repository = repository,
+            stagingFileManager = stagingManager,
+            capabilityDetector = CapabilityDetector(client),
+            httpClient = client
+        )
+
+        runner.run()
+
+        val item = repository.getDownloadById(downloadId)!!
+        assertEquals(DownloadStatus.COMPLETED, item.status)
+        val file = File(item.destinationPath)
+        assertTrue(file.exists())
+        assertEquals(payload.size.toLong(), file.length())
+        assertArrayEquals(payload, file.readBytes())
+    }
+
+    @Test
+    fun testFinalizeFileCollisionAppendsCounter() {
+        val destDir = stagingManager.getResolvedDestinationDirectory()
+        val existingFile = File(destDir, "collision.bin")
+        existingFile.writeText("existing version")
+
+        val stagingFile = stagingManager.createStagingFile(999L)
+        stagingFile.writeText("new version")
+
+        val finalFile = stagingManager.finalizeDownload(stagingFile, "collision.bin")
+
+        assertEquals("collision(1).bin", finalFile.name)
+        assertTrue(existingFile.exists())
+        assertEquals("existing version", existingFile.readText())
+        assertTrue(finalFile.exists())
+        assertEquals("new version", finalFile.readText())
+    }
+
+    @Test
+    fun testRedirectUpdatesEffectiveUrl() = runBlocking {
+        val payload = "Redirected Content".toByteArray()
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                if (request.path == "/start_redirect") {
+                    return MockResponse()
+                        .setResponseCode(302)
+                        .setHeader("Location", server.url("/cdn_target.bin").toString())
+                }
+                return MockResponse()
+                    .setResponseCode(200)
+                    .setHeader("Content-Length", payload.size.toString())
+                    .setBody(Buffer().write(payload))
+            }
+        }
+
+        val initialUrl = server.url("/start_redirect").toString()
+        val downloadId = repository.insertDownload(
+            DownloadItem(
+                url = initialUrl,
+                originalUrl = initialUrl,
+                fileName = "redirect_target.bin",
+                concurrency = 1,
+                destinationPath = "",
+                stagingPath = "",
+                status = DownloadStatus.QUEUED
+            )
+        )
+
+        val runner = DownloadJobRunner(
+            downloadId = downloadId,
+            repository = repository,
+            stagingFileManager = stagingManager,
+            capabilityDetector = CapabilityDetector(client),
+            httpClient = client
+        )
+
+        runner.run()
+
+        val item = repository.getDownloadById(downloadId)!!
+        assertEquals(DownloadStatus.COMPLETED, item.status)
+        assertEquals(initialUrl, item.originalUrl)
+        assertTrue(item.url.contains("/cdn_target.bin"))
+        val file = File(item.destinationPath)
+        assertArrayEquals(payload, file.readBytes())
     }
 }

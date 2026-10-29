@@ -8,6 +8,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -34,6 +35,10 @@ fun BrowserScreen(
     var canGoForward by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var loadingProgress by remember { mutableStateOf(0) }
+
+    BackHandler(enabled = canGoBack) {
+        webView?.goBack()
+    }
 
     Scaffold(
         topBar = {
@@ -129,14 +134,26 @@ fun BrowserScreen(
                     settings.loadWithOverviewMode = true
                     settings.useWideViewPort = true
 
-                    setDownloadListener { url, userAgent, contentDisposition, mimetype, _ ->
+                    setDownloadListener { url, userAgent, contentDisposition, _, _ ->
                         val cookie = CookieManager.getInstance().getCookie(url)
                         onInterceptDownload(url, cookie, userAgent, contentDisposition)
                     }
 
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                            return false // handle within WebView
+                            val reqUrl = request?.url?.toString() ?: return false
+                            val path = request.url?.path?.lowercase() ?: ""
+                            val downloadExtensions = listOf(
+                                ".apk", ".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz",
+                                ".iso", ".dmg", ".bin", ".exe", ".msi", ".pdf", ".mp4", ".mkv", ".mp3"
+                            )
+                            if (downloadExtensions.any { path.endsWith(it) }) {
+                                val cookie = CookieManager.getInstance().getCookie(reqUrl)
+                                val userAgent = view?.settings?.userAgentString
+                                onInterceptDownload(reqUrl, cookie, userAgent, null)
+                                return true
+                            }
+                            return false
                         }
 
                         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {

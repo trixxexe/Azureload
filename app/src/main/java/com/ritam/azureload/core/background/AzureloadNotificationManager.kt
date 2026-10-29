@@ -38,7 +38,7 @@ object AzureloadNotificationManager {
     fun buildNotification(
         context: Context,
         title: String = "Downloading files...",
-        progressPercent: Int = 0,
+        progressPercent: Int = -1,
         speedText: String = "",
         downloadId: Long = -1L
     ): Notification {
@@ -52,16 +52,24 @@ object AzureloadNotificationManager {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val contentText = if (progressPercent >= 0) {
+            if (speedText.isNotBlank()) "$progressPercent% • $speedText" else "$progressPercent%"
+        } else {
+            if (speedText.isNotBlank()) speedText else "Downloading..."
+        }
+
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)
-            .setContentText(if (speedText.isNotBlank()) "$progressPercent% • $speedText" else "$progressPercent%")
+            .setContentText(contentText)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(contentPendingIntent)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
 
         if (progressPercent >= 0) {
-            builder.setProgress(100, progressPercent, progressPercent == 0 && speedText.isBlank())
+            builder.setProgress(100, progressPercent, false)
+        } else {
+            builder.setProgress(0, 0, true)
         }
 
         if (downloadId > 0) {
