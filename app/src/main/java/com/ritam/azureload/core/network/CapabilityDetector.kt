@@ -30,6 +30,18 @@ class CapabilityDetector(
         try {
             response = client.newCall(request).execute()
             val code = response.code
+
+            // Handle HTTP error codes
+            if (code == 429) {
+                val retryAfterSec = response.header("Retry-After")?.toLongOrNull()
+                throw TransientDownloadException("Server returned HTTP 429 Too Many Requests", statusCode = 429, retryAfterSeconds = retryAfterSec)
+            } else if (code in 500..599) {
+                val retryAfterSec = response.header("Retry-After")?.toLongOrNull()
+                throw TransientDownloadException("Server returned HTTP $code: ${response.message}", statusCode = code, retryAfterSeconds = retryAfterSec)
+            } else if (code in 400..499 && code != 416) {
+                throw FatalDownloadException("Server returned HTTP $code: ${response.message}", statusCode = code)
+            }
+
             val finalUrl = response.request.url.toString()
             val eTag = response.header("ETag")
             val lastModified = response.header("Last-Modified")
@@ -41,10 +53,11 @@ class CapabilityDetector(
 
             val isCompressed = contentEncoding != null && !contentEncoding.equals("identity", ignoreCase = true)
             var supportsRange = code == 206
-            if (!supportsRange && acceptRanges.equals("bytes", ignoreCase = true) && code == 200) {
-                // Some servers declare Accept-Ranges but return 200 on bytes=0-0
-                // Still, per spec: "Never assume that sending a Range header guarantees range support."
-                // Only treat as true if 206 was actually returned or verified.
+            if (acceptRanges.equals("none", ignoreCase = true)) {
+                supportsRange = false
+            } else if (!supportsRange && acceptRanges.equals("bytes", ignoreCase = true) && code == 200) {
+                // Some servers declare Accept-Ranges but return 200 on bytes=0-0.
+                // Per spec: only treat as true if 206 was verified.
                 supportsRange = false
             }
 

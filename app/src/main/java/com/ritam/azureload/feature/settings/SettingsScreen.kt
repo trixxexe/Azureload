@@ -6,8 +6,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -15,15 +13,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ritam.azureload.core.settings.SettingsManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    settingsManager: SettingsManager,
     onBack: () -> Unit
 ) {
-    var wifiOnly by remember { mutableStateOf(false) }
-    var defaultConcurrency by remember { mutableStateOf(4f) }
-    var maxActiveTransfers by remember { mutableStateOf(3f) }
+    val wifiOnly by settingsManager.wifiOnlyFlow.collectAsState()
+    val defaultConcurrency by settingsManager.defaultConcurrencyFlow.collectAsState()
+    val maxActiveTransfers by settingsManager.maxActiveTransfersFlow.collectAsState()
 
     Scaffold(
         topBar = {
@@ -69,7 +69,7 @@ fun SettingsScreen(
                             Text("Only download over Wi-Fi", fontWeight = FontWeight.SemiBold)
                             Text("Prevent transfers on cellular data", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Switch(checked = wifiOnly, onCheckedChange = { wifiOnly = it })
+                        Switch(checked = wifiOnly, onCheckedChange = { settingsManager.setWifiOnly(it) })
                     }
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
@@ -79,11 +79,11 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("Default Concurrency", fontWeight = FontWeight.SemiBold)
-                        Text("${defaultConcurrency.toInt()} Threads", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("$defaultConcurrency Threads", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     }
                     Slider(
-                        value = defaultConcurrency,
-                        onValueChange = { defaultConcurrency = it },
+                        value = defaultConcurrency.toFloat(),
+                        onValueChange = { settingsManager.setDefaultConcurrency(it.toInt()) },
                         valueRange = 1f..16f,
                         steps = 14
                     )
@@ -96,11 +96,11 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text("Max Concurrent Active Transfers", fontWeight = FontWeight.SemiBold)
-                        Text("${maxActiveTransfers.toInt()} Active", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("$maxActiveTransfers Active", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                     }
                     Slider(
-                        value = maxActiveTransfers,
-                        onValueChange = { maxActiveTransfers = it },
+                        value = maxActiveTransfers.toFloat(),
+                        onValueChange = { settingsManager.setMaxActiveTransfers(it.toInt()) },
                         valueRange = 1f..6f,
                         steps = 4
                     )

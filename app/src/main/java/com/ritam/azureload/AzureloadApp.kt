@@ -18,6 +18,9 @@ class AzureloadApp : Application() {
     lateinit var stagingFileManager: StagingFileManager
         private set
 
+    lateinit var settingsManager: com.ritam.azureload.core.settings.SettingsManager
+        private set
+
     lateinit var downloadCoordinator: DownloadCoordinator
         private set
 
@@ -26,7 +29,8 @@ class AzureloadApp : Application() {
         database = AzureloadDatabase.getInstance(this)
         repository = DownloadRepository(database.downloadDao(), database.chunkDao())
         stagingFileManager = StagingFileManager(this)
-        downloadCoordinator = DownloadCoordinator(this, repository, stagingFileManager)
+        settingsManager = com.ritam.azureload.core.settings.SettingsManager(this)
+        downloadCoordinator = DownloadCoordinator(this, repository, stagingFileManager, settingsManager)
 
         AzureloadNotificationManager.createNotificationChannel(this)
     }

@@ -1,10 +1,16 @@
 package com.ritam.azureload
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkRequest
 import android.os.Build
 import android.os.Bundle
+import android.webkit.MimeTypeMap
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -15,6 +21,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -22,6 +29,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ritam.azureload.core.model.DownloadItem
 import com.ritam.azureload.core.model.DownloadStatus
+import com.ritam.azureload.core.network.CapabilityDetector
 import com.ritam.azureload.feature.add.AddDownloadScreen
 import com.ritam.azureload.feature.browser.BrowserScreen
 import com.ritam.azureload.feature.dashboard.DashboardScreen
@@ -31,9 +39,13 @@ import com.ritam.azureload.feature.settings.SettingsScreen
 import com.ritam.azureload.ui.navigation.Screen
 import com.ritam.azureload.ui.theme.AzureloadTheme
 import kotlinx.coroutines.launch
+import java.io.File
 import java.net.URLDecoder
 
 class MainActivity : ComponentActivity() {
+
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,6 +54,20 @@ class MainActivity : ComponentActivity() {
         val repository = app.repository
         val coordinator = app.downloadCoordinator
         val stagingManager = app.stagingFileManager
+        val settingsManager = app.settingsManager
+
+        // Register network callback for Wi-Fi and connectivity change detection
+        try {
+            connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            networkCallback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    coordinator.onNetworkStateChanged()
+                }
+            }
+            networkCallback?.let {
+                connectivityManager?.registerDefaultNetworkCallback(it)
+            }
+        } catch (_: Exception) {}
 
         // Extract candidate URL from share intent if launched via Send intent
         val sharedUrl = extractUrlFromIntent(intent)
@@ -68,12 +94,13 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     val downloads by repository.getAllDownloads().collectAsState(initial = emptyList())
                     val speeds by coordinator.speeds.collectAsState()
+                    val defaultConcurrency by settingsManager.defaultConcurrencyFlow.collectAsState()
                     val coroutineScope = rememberCoroutineScope()
 
                     // If shared from another app, navigate to Add screen directly
                     LaunchedEffect(sharedUrl) {
                         if (!sharedUrl.isNullOrBlank()) {
-                            navController.navigate(Screen.Add.createRoute(sharedUrl))
+                            navController.navigate(Screen.Add.createRoute(url = sharedUrl))
                         }
                     }
 
@@ -92,26 +119,37 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToDetail = { id -> navController.navigate(Screen.Detail.createRoute(id)) },
                                 onPause = { coordinator.pauseDownload(it) },
                                 onResume = { coordinator.resumeDownload(it) },
+                                onRetry = { coordinator.retryDownload(it) },
                                 onCancel = { coordinator.cancelDownload(it) },
-                                onDelete = { coordinator.cancelDownload(it) }
+                                onDelete = { coordinator.cancelDownload(it) },
+                                onOpenFile = { openDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) }
                             )
                         }
 
                         composable(
                             route = Screen.Add.route,
-                            arguments = listOf(navArgument("url") {
-                                type = NavType.StringType
-                                nullable = true
-                                defaultValue = null
-                            })
+                            arguments = listOf(
+                                navArgument("url") { type = NavType.StringType; nullable = true; defaultValue = null },
+                                navArgument("cookie") { type = NavType.StringType; nullable = true; defaultValue = null },
+                                navArgument("userAgent") { type = NavType.StringType; nullable = true; defaultValue = null },
+                                navArgument("fileName") { type = NavType.StringType; nullable = true; defaultValue = null }
+                            )
                         ) { backStackEntry ->
-                            val rawUrl = backStackEntry.arguments?.getString("url")
-                            val decodedUrl = rawUrl?.let {
+                            fun decodeSafely(s: String?): String? = s?.let {
                                 try { URLDecoder.decode(it, "UTF-8") } catch (_: Exception) { it }
                             }
 
+                            val initialUrl = decodeSafely(backStackEntry.arguments?.getString("url"))
+                            val initialCookie = decodeSafely(backStackEntry.arguments?.getString("cookie"))
+                            val initialUserAgent = decodeSafely(backStackEntry.arguments?.getString("userAgent"))
+                            val initialFileName = decodeSafely(backStackEntry.arguments?.getString("fileName"))
+
                             AddDownloadScreen(
-                                initialUrl = decodedUrl,
+                                initialUrl = initialUrl,
+                                initialCookie = initialCookie,
+                                initialUserAgent = initialUserAgent,
+                                initialFileName = initialFileName,
+                                defaultConcurrency = defaultConcurrency,
                                 onBack = { navController.popBackStack() },
                                 onSubmitDownload = { url, fileName, concurrency, headers, sha256 ->
                                     coroutineScope.launch {
@@ -148,8 +186,14 @@ class MainActivity : ComponentActivity() {
                             BrowserScreen(
                                 initialUrl = decodedUrl,
                                 onBack = { navController.popBackStack() },
-                                onInterceptDownload = { downloadUrl, cookie, userAgent, _ ->
-                                    navController.navigate(Screen.Add.createRoute(downloadUrl))
+                                onInterceptDownload = { downloadUrl, cookie, userAgent, contentDisposition ->
+                                    val suggestedName = CapabilityDetector.extractFileName(contentDisposition, downloadUrl)
+                                    navController.navigate(Screen.Add.createRoute(
+                                        url = downloadUrl,
+                                        cookie = cookie,
+                                        userAgent = userAgent,
+                                        fileName = suggestedName
+                                    ))
                                 }
                             )
                         }
@@ -170,12 +214,17 @@ class MainActivity : ComponentActivity() {
                                 onBack = { navController.popBackStack() },
                                 onPause = { coordinator.pauseDownload(it) },
                                 onResume = { coordinator.resumeDownload(it) },
-                                onCancel = { coordinator.cancelDownload(it) }
+                                onRetry = { coordinator.retryDownload(it) },
+                                onCancel = { coordinator.cancelDownload(it) },
+                                onOpenFile = { openDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) }
                             )
                         }
 
                         composable(Screen.Settings.route) {
-                            SettingsScreen(onBack = { navController.popBackStack() })
+                            SettingsScreen(
+                                settingsManager = settingsManager,
+                                onBack = { navController.popBackStack() }
+                            )
                         }
 
                         composable(Screen.Diagnostics.route) {
@@ -191,14 +240,49 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        networkCallback?.let {
+            try { connectivityManager?.unregisterNetworkCallback(it) } catch (_: Exception) {}
+        }
+    }
+
     private fun extractUrlFromIntent(intent: Intent?): String? {
         if (intent == null) return null
         if (Intent.ACTION_SEND == intent.action && intent.type == "text/plain") {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return null
-            // Extract URL from text (handles both direct URLs and URLs embedded in shared messages)
             val matcher = Regex("https?://[\\w\\d:#@%/;$()~_?\\+-=\\\\\\.&]+").find(text)
             return matcher?.value
         }
         return null
+    }
+
+    private fun openDownloadedFile(context: Context, filePath: String, mimeType: String?) {
+        val file = File(filePath)
+        if (!file.exists()) {
+            Toast.makeText(context, "File not found: $filePath", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            val type = mimeType ?: getMimeType(file)
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, type)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Cannot open file: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun getMimeType(file: File): String {
+        val ext = file.extension.lowercase()
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
     }
 }

@@ -37,8 +37,10 @@ fun DashboardScreen(
     onNavigateToDetail: (Long) -> Unit,
     onPause: (Long) -> Unit,
     onResume: (Long) -> Unit,
+    onRetry: (Long) -> Unit,
     onCancel: (Long) -> Unit,
-    onDelete: (Long) -> Unit
+    onDelete: (Long) -> Unit,
+    onOpenFile: (DownloadItem) -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(FilterTab.ALL) }
 
@@ -157,8 +159,10 @@ fun DashboardScreen(
                             onClick = { onNavigateToDetail(item.id) },
                             onPause = { onPause(item.id) },
                             onResume = { onResume(item.id) },
+                            onRetry = { onRetry(item.id) },
                             onCancel = { onCancel(item.id) },
-                            onDelete = { onDelete(item.id) }
+                            onDelete = { onDelete(item.id) },
+                            onOpenFile = { onOpenFile(item) }
                         )
                     }
                 }
@@ -174,8 +178,10 @@ fun DownloadCard(
     onClick: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
+    onRetry: () -> Unit,
     onCancel: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onOpenFile: () -> Unit
 ) {
     val progress = if (item.totalBytes > 0) {
         (item.downloadedBytes.toFloat() / item.totalBytes.toFloat()).coerceIn(0f, 1f)
@@ -314,9 +320,19 @@ fun DownloadCard(
                                 Icon(Icons.Default.Pause, contentDescription = "Pause", tint = AzureWarning)
                             }
                         }
-                        DownloadStatus.PAUSED, DownloadStatus.FAILED -> {
+                        DownloadStatus.PAUSED -> {
                             IconButton(onClick = onResume) {
                                 Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        DownloadStatus.FAILED -> {
+                            IconButton(onClick = onRetry) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        DownloadStatus.COMPLETED -> {
+                            IconButton(onClick = onOpenFile) {
+                                Icon(Icons.Default.OpenInNew, contentDescription = "Open file", tint = MaterialTheme.colorScheme.primary)
                             }
                         }
                         else -> {}

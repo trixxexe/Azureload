@@ -36,7 +36,9 @@ fun DetailScreen(
     onBack: () -> Unit,
     onPause: (Long) -> Unit,
     onResume: (Long) -> Unit,
-    onCancel: (Long) -> Unit
+    onRetry: (Long) -> Unit,
+    onCancel: (Long) -> Unit,
+    onOpenFile: (DownloadItem) -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -155,7 +157,7 @@ fun DetailScreen(
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text("Pause")
                                 }
-                            } else if (download.status == DownloadStatus.PAUSED || download.status == DownloadStatus.FAILED) {
+                            } else if (download.status == DownloadStatus.PAUSED) {
                                 Button(
                                     onClick = { onResume(download.id) },
                                     modifier = Modifier.weight(1f),
@@ -164,6 +166,26 @@ fun DetailScreen(
                                     Icon(Icons.Default.PlayArrow, contentDescription = null)
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text("Resume")
+                                }
+                            } else if (download.status == DownloadStatus.FAILED) {
+                                Button(
+                                    onClick = { onRetry(download.id) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Icon(Icons.Default.Refresh, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Retry")
+                                }
+                            } else if (download.status == DownloadStatus.COMPLETED) {
+                                Button(
+                                    onClick = { onOpenFile(download) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                ) {
+                                    Icon(Icons.Default.OpenInNew, contentDescription = null)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Open File")
                                 }
                             }
 
@@ -174,7 +196,7 @@ fun DetailScreen(
                             ) {
                                 Icon(Icons.Default.Close, contentDescription = null)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Cancel")
+                                Text(if (download.status == DownloadStatus.COMPLETED) "Delete" else "Cancel")
                             }
                         }
                     }

@@ -7,7 +7,10 @@ import com.ritam.azureload.core.model.ChunkStatus
 import com.ritam.azureload.core.model.DownloadItem
 import com.ritam.azureload.core.model.DownloadStatus
 import com.ritam.azureload.core.network.CapabilityDetector
+import com.ritam.azureload.core.network.FatalDownloadException
 import com.ritam.azureload.core.network.HttpClientProvider
+import com.ritam.azureload.core.network.RangeNotSupportedException
+import com.ritam.azureload.core.network.TransientDownloadException
 import com.ritam.azureload.core.storage.IntegrityVerifier
 import com.ritam.azureload.core.storage.StagingFileManager
 import kotlinx.coroutines.CancellationException
@@ -18,13 +21,12 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import java.io.File
-import java.io.InputStream
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.min
 import kotlin.random.Random
@@ -43,70 +45,77 @@ class DownloadJobRunner(
     private val currentSpeed = AtomicLong(0L)
 
     suspend fun run() = withContext(Dispatchers.IO) {
-        val initialDownload = repository.getDownloadById(downloadId) ?: return@withContext
+        var currentDownload = repository.getDownloadById(downloadId) ?: return@withContext
         try {
             repository.updateDownloadStatus(downloadId, DownloadStatus.DETECTING)
 
             // Step 1: Detect server capabilities or re-verify if resuming
-            val capability = capabilityDetector.detect(initialDownload.url, initialDownload.customHeaders)
+            val capability = capabilityDetector.detect(currentDownload.url, currentDownload.customHeaders)
 
             // ETag / Last-Modified change detection for existing downloads
-            if (initialDownload.downloadedBytes > 0) {
-                val etagChanged = initialDownload.eTag != null && capability.eTag != null && initialDownload.eTag != capability.eTag
-                val lmChanged = initialDownload.lastModified != null && capability.lastModified != null && initialDownload.lastModified != capability.lastModified
+            if (currentDownload.downloadedBytes > 0) {
+                val etagChanged = currentDownload.eTag != null && capability.eTag != null && currentDownload.eTag != capability.eTag
+                val lmChanged = currentDownload.lastModified != null && capability.lastModified != null && currentDownload.lastModified != capability.lastModified
 
                 if (etagChanged || lmChanged) {
                     Log.w(tag, "Remote file changed (ETag/Last-Modified mismatch). Restarting from scratch.")
-                    val stagingFile = File(initialDownload.stagingPath)
-                    stagingFileManager.cleanupStaging(stagingFile)
-                    repository.updateDownload(
-                        initialDownload.copy(
-                            downloadedBytes = 0,
-                            eTag = capability.eTag,
-                            lastModified = capability.lastModified,
-                            totalBytes = capability.contentLength
-                        )
+                    if (currentDownload.stagingPath.isNotBlank()) {
+                        stagingFileManager.cleanupStaging(File(currentDownload.stagingPath))
+                    }
+                    repository.saveChunks(downloadId, emptyList())
+                    currentDownload = currentDownload.copy(
+                        downloadedBytes = 0,
+                        eTag = capability.eTag,
+                        lastModified = capability.lastModified,
+                        totalBytes = capability.contentLength
                     )
+                    repository.updateDownload(currentDownload)
                 }
             }
 
-            val totalBytes = if (capability.contentLength > 0) capability.contentLength else initialDownload.totalBytes
-            val supportsRange = capability.supportsRange
+            val totalBytes = if (capability.contentLength > 0) capability.contentLength else currentDownload.totalBytes
+            var supportsRange = capability.supportsRange
 
             // Step 2: Storage space validation
-            val bytesNeeded = if (totalBytes > 0) (totalBytes - initialDownload.downloadedBytes).coerceAtLeast(0) else 10L * 1024 * 1024
+            val bytesNeeded = if (totalBytes > 0) (totalBytes - currentDownload.downloadedBytes).coerceAtLeast(0) else 10L * 1024 * 1024
             if (!stagingFileManager.checkFreeSpace(bytesNeeded)) {
                 repository.updateDownloadStatus(downloadId, DownloadStatus.FAILED, "Insufficient storage space on device")
                 return@withContext
             }
 
-            // Step 3: Ensure staging file is allocated
-            val stagingFile = if (initialDownload.stagingPath.isNotBlank()) {
-                File(initialDownload.stagingPath)
+            // Step 3: Ensure staging file exists
+            val stagingFile = if (currentDownload.stagingPath.isNotBlank()) {
+                File(currentDownload.stagingPath)
             } else {
                 stagingFileManager.createStagingFile(downloadId)
             }
 
-            if (supportsRange && totalBytes > 0) {
-                stagingFileManager.allocateStagingFile(stagingFile, totalBytes)
-            }
-
-            repository.updateDownload(
-                initialDownload.copy(
-                    stagingPath = stagingFile.absolutePath,
-                    totalBytes = totalBytes,
-                    supportsRanges = supportsRange,
-                    eTag = capability.eTag ?: initialDownload.eTag,
-                    lastModified = capability.lastModified ?: initialDownload.lastModified,
-                    status = DownloadStatus.DOWNLOADING
-                )
+            currentDownload = currentDownload.copy(
+                stagingPath = stagingFile.absolutePath,
+                totalBytes = totalBytes,
+                supportsRanges = supportsRange,
+                eTag = capability.eTag ?: currentDownload.eTag,
+                lastModified = capability.lastModified ?: currentDownload.lastModified,
+                status = DownloadStatus.DOWNLOADING
             )
+            repository.updateDownload(currentDownload)
 
-            // Step 4: Execute transfer (Parallel chunk or single stream)
-            if (supportsRange && totalBytes > 0 && initialDownload.concurrency > 1) {
-                executeMultiRangeDownload(initialDownload, stagingFile, totalBytes)
+            // Step 4: Execute transfer (Parallel chunk or single stream with fallback)
+            if (supportsRange && totalBytes > 0 && currentDownload.concurrency > 1) {
+                stagingFileManager.allocateStagingFile(stagingFile, totalBytes)
+                try {
+                    executeMultiRangeDownload(currentDownload, stagingFile, totalBytes)
+                } catch (rne: RangeNotSupportedException) {
+                    Log.w(tag, "Server rejected range chunks. Falling back to single-stream download: ${rne.message}")
+                    supportsRange = false
+                    stagingFileManager.truncateStagingFile(stagingFile, 0L)
+                    repository.saveChunks(downloadId, emptyList())
+                    currentDownload = currentDownload.copy(supportsRanges = false, downloadedBytes = 0L)
+                    repository.updateDownload(currentDownload)
+                    executeSingleStreamDownload(currentDownload, stagingFile, totalBytes, supportsRange = false)
+                }
             } else {
-                executeSingleStreamDownload(initialDownload, stagingFile, totalBytes, supportsRange)
+                executeSingleStreamDownload(currentDownload, stagingFile, totalBytes, supportsRange)
             }
 
             // Step 5: Finalization & Verification
@@ -116,16 +125,16 @@ class DownloadJobRunner(
                 throw IllegalStateException("Integrity check failed: downloaded size (${stagingFile.length()}) != expected size ($totalBytes)")
             }
 
-            if (!initialDownload.expectedSha256.isNullOrBlank()) {
-                val matches = IntegrityVerifier.verifySha256(stagingFile, initialDownload.expectedSha256)
+            if (!currentDownload.expectedSha256.isNullOrBlank()) {
+                val matches = IntegrityVerifier.verifySha256(stagingFile, currentDownload.expectedSha256)
                 if (!matches) {
                     throw IllegalStateException("Integrity check failed: SHA-256 checksum mismatch")
                 }
             }
 
-            val finalFile = stagingFileManager.finalizeDownload(stagingFile, initialDownload.fileName)
+            val finalFile = stagingFileManager.finalizeDownload(stagingFile, currentDownload.fileName)
             repository.updateDownload(
-                initialDownload.copy(
+                currentDownload.copy(
                     status = DownloadStatus.COMPLETED,
                     destinationPath = finalFile.absolutePath,
                     downloadedBytes = finalFile.length(),
@@ -138,12 +147,12 @@ class DownloadJobRunner(
 
         } catch (ce: CancellationException) {
             Log.i(tag, "Download $downloadId cancelled/paused")
-            // Preserve paused state
             repository.updateDownloadStatus(downloadId, DownloadStatus.PAUSED)
             throw ce
         } catch (e: Exception) {
             Log.e(tag, "Download $downloadId failed", e)
-            repository.updateDownloadStatus(downloadId, DownloadStatus.FAILED, e.message ?: "Download error")
+            val msg = e.message ?: "Download error"
+            repository.updateDownloadStatus(downloadId, DownloadStatus.FAILED, msg)
         }
     }
 
@@ -191,6 +200,11 @@ class DownloadJobRunner(
                 return
             } catch (ce: CancellationException) {
                 throw ce
+            } catch (rne: RangeNotSupportedException) {
+                throw rne
+            } catch (fe: FatalDownloadException) {
+                repository.updateChunkProgress(currentChunk.id, currentChunk.downloadedBytes, ChunkStatus.FAILED)
+                throw fe
             } catch (e: Exception) {
                 attempt++
                 Log.w(tag, "Chunk ${currentChunk.chunkIndex} of download $downloadId attempt $attempt failed: ${e.message}")
@@ -198,10 +212,13 @@ class DownloadJobRunner(
                     repository.updateChunkProgress(currentChunk.id, currentChunk.downloadedBytes, ChunkStatus.FAILED)
                     throw e
                 }
-                val jitter = Random.nextLong(100, 500)
-                val backoffMs = (1000L * (1 shl min(attempt, 5))) + jitter
-                delay(backoffMs)
-                // Reload chunk state before next attempt
+
+                var delayMs = (1000L * (1 shl min(attempt, 5))) + Random.nextLong(100, 500)
+                if (e is TransientDownloadException && e.retryAfterSeconds != null) {
+                    delayMs = (e.retryAfterSeconds * 1000L).coerceIn(500L, 60_000L)
+                }
+                delay(delayMs)
+
                 val refreshed = repository.getChunksForDownload(downloadId).firstOrNull { it.id == currentChunk.id }
                 if (refreshed != null) currentChunk = refreshed
             }
@@ -217,7 +234,7 @@ class DownloadJobRunner(
         val endByte = chunk.endOffset
 
         if (startByte > endByte) {
-            return // already completed
+            return
         }
 
         val requestBuilder = Request.Builder()
@@ -232,34 +249,66 @@ class DownloadJobRunner(
         var response: Response? = null
         try {
             response = httpClient.newCall(requestBuilder.build()).execute()
-            if (response.code != 206 && response.code != 200) {
-                throw IllegalStateException("Server returned HTTP ${response.code} for chunk byte range $startByte-$endByte")
+            val code = response.code
+
+            if (code == 429) {
+                val retryAfterSec = response.header("Retry-After")?.toLongOrNull()
+                throw TransientDownloadException("Server returned HTTP 429 Too Many Requests", statusCode = 429, retryAfterSeconds = retryAfterSec)
+            } else if (code in 500..599) {
+                val retryAfterSec = response.header("Retry-After")?.toLongOrNull()
+                throw TransientDownloadException("Server returned HTTP $code: ${response.message}", statusCode = code, retryAfterSeconds = retryAfterSec)
+            } else if (code == 200) {
+                throw RangeNotSupportedException("Server returned HTTP 200 OK for byte range request. Server ignores byte ranges.")
+            } else if (code in 400..499 && code != 206) {
+                throw FatalDownloadException("Server returned HTTP $code for chunk range $startByte-$endByte", statusCode = code)
+            } else if (code != 206) {
+                throw IOException("Unexpected HTTP status code $code for chunk range $startByte-$endByte")
             }
 
-            val body = response.body ?: throw IllegalStateException("Empty body for chunk $startByte-$endByte")
+            val contentRange = response.header("Content-Range")
+            if (contentRange != null && !contentRange.contains("bytes $startByte-")) {
+                throw IOException("Mismatched Content-Range header: $contentRange, expected start $startByte")
+            }
+
+            val body = response.body ?: throw FatalDownloadException("Empty response body for chunk $startByte-$endByte")
             body.byteStream().use { input ->
                 val buffer = ByteArray(32 * 1024)
                 var currentWriteOffset = startByte
                 var totalChunkDownloaded = chunk.downloadedBytes
+                val expectedChunkSize = chunk.totalSize
                 var bytesRead: Int
                 var lastDbPersist = System.currentTimeMillis()
 
-                while (input.read(buffer).also { bytesRead = it } != -1) {
-                    currentCoroutineContext().ensureActive()
-                    stagingFileManager.writeChunkData(stagingFile, currentWriteOffset, buffer, bytesRead)
-                    currentWriteOffset += bytesRead
-                    totalChunkDownloaded += bytesRead
+                try {
+                    while (totalChunkDownloaded < expectedChunkSize) {
+                        val maxToRead = min(buffer.size.toLong(), expectedChunkSize - totalChunkDownloaded).toInt()
+                        bytesRead = input.read(buffer, 0, maxToRead)
+                        if (bytesRead == -1) break
 
-                    val now = System.currentTimeMillis()
-                    if (now - lastDbPersist >= 500) {
-                        repository.updateChunkProgress(chunk.id, totalChunkDownloaded, ChunkStatus.DOWNLOADING)
-                        updateGlobalProgress()
-                        lastDbPersist = now
+                        currentCoroutineContext().ensureActive()
+                        stagingFileManager.writeChunkData(stagingFile, currentWriteOffset, buffer, bytesRead)
+                        currentWriteOffset += bytesRead
+                        totalChunkDownloaded += bytesRead
+
+                        val now = System.currentTimeMillis()
+                        if (now - lastDbPersist >= 500) {
+                            repository.updateChunkProgress(chunk.id, totalChunkDownloaded, ChunkStatus.DOWNLOADING)
+                            updateGlobalProgress()
+                            lastDbPersist = now
+                        }
                     }
+                } finally {
+                    repository.updateChunkProgress(
+                        chunk.id,
+                        totalChunkDownloaded,
+                        if (totalChunkDownloaded >= expectedChunkSize) ChunkStatus.COMPLETED else ChunkStatus.DOWNLOADING
+                    )
+                    updateGlobalProgress()
                 }
 
-                repository.updateChunkProgress(chunk.id, totalChunkDownloaded, ChunkStatus.COMPLETED)
-                updateGlobalProgress()
+                if (totalChunkDownloaded < expectedChunkSize) {
+                    throw IOException("Unexpected EOF in chunk ${chunk.chunkIndex}: expected $expectedChunkSize bytes, got $totalChunkDownloaded bytes")
+                }
             }
         } finally {
             response?.close()
@@ -273,8 +322,8 @@ class DownloadJobRunner(
         supportsRange: Boolean
     ) {
         var startOffset = 0L
-        if (supportsRange && stagingFile.exists() && stagingFile.length() > 0) {
-            startOffset = stagingFile.length()
+        if (supportsRange && stagingFile.exists() && download.downloadedBytes > 0 && (totalBytes <= 0 || download.downloadedBytes < totalBytes)) {
+            startOffset = download.downloadedBytes
         }
 
         val requestBuilder = Request.Builder()
@@ -292,30 +341,67 @@ class DownloadJobRunner(
         var response: Response? = null
         try {
             response = httpClient.newCall(requestBuilder.build()).execute()
-            if (!response.isSuccessful) {
-                throw IllegalStateException("HTTP ${response.code}: ${response.message}")
+            val code = response.code
+
+            if (code == 429) {
+                val retryAfterSec = response.header("Retry-After")?.toLongOrNull()
+                throw TransientDownloadException("Server returned HTTP 429 Too Many Requests", statusCode = 429, retryAfterSeconds = retryAfterSec)
+            } else if (code in 500..599) {
+                val retryAfterSec = response.header("Retry-After")?.toLongOrNull()
+                throw TransientDownloadException("Server returned HTTP $code: ${response.message}", statusCode = code, retryAfterSeconds = retryAfterSec)
+            } else if (code in 400..499 && code != 416) {
+                throw FatalDownloadException("Server returned HTTP $code: ${response.message}", statusCode = code)
             }
 
-            val body = response.body ?: throw IllegalStateException("Empty response body")
+            var currentWriteOffset = startOffset
+            if (startOffset > 0) {
+                if (code == 200) {
+                    Log.w(tag, "Server ignored Range header on resume (HTTP 200). Restarting single stream from byte 0.")
+                    currentWriteOffset = 0L
+                    stagingFileManager.truncateStagingFile(stagingFile, 0L)
+                } else if (code == 206) {
+                    val contentRange = response.header("Content-Range")
+                    if (contentRange != null && !contentRange.contains("bytes $startOffset-")) {
+                        Log.w(tag, "Unexpected Content-Range: $contentRange, expected start $startOffset. Restarting.")
+                        currentWriteOffset = 0L
+                        stagingFileManager.truncateStagingFile(stagingFile, 0L)
+                    }
+                }
+            } else {
+                if (!response.isSuccessful) {
+                    throw FatalDownloadException("HTTP $code: ${response.message}", statusCode = code)
+                }
+                stagingFileManager.truncateStagingFile(stagingFile, 0L)
+            }
+
+            val body = response.body ?: throw FatalDownloadException("Empty response body from server")
             body.byteStream().use { input ->
                 val buffer = ByteArray(32 * 1024)
-                var currentWriteOffset = startOffset
                 var bytesRead: Int
                 var lastDbPersist = System.currentTimeMillis()
 
-                while (input.read(buffer).also { bytesRead = it } != -1) {
-                    currentCoroutineContext().ensureActive()
-                    stagingFileManager.writeChunkData(stagingFile, currentWriteOffset, buffer, bytesRead)
-                    currentWriteOffset += bytesRead
+                try {
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        currentCoroutineContext().ensureActive()
+                        stagingFileManager.writeChunkData(stagingFile, currentWriteOffset, buffer, bytesRead)
+                        currentWriteOffset += bytesRead
 
-                    val now = System.currentTimeMillis()
-                    if (now - lastDbPersist >= 500) {
-                        calculateSpeed(currentWriteOffset)
-                        repository.updateDownloadProgress(downloadId, currentWriteOffset)
-                        onProgress(downloadId, currentWriteOffset, currentSpeed.get())
-                        lastDbPersist = now
+                        val now = System.currentTimeMillis()
+                        if (now - lastDbPersist >= 500) {
+                            calculateSpeed(currentWriteOffset)
+                            repository.updateDownloadProgress(downloadId, currentWriteOffset)
+                            onProgress(downloadId, currentWriteOffset, currentSpeed.get())
+                            lastDbPersist = now
+                        }
                     }
+                } finally {
+                    repository.updateDownloadProgress(downloadId, currentWriteOffset)
                 }
+
+                if (totalBytes > 0 && currentWriteOffset < totalBytes) {
+                    throw IOException("Unexpected EOF: received $currentWriteOffset bytes, expected $totalBytes bytes")
+                }
+
                 repository.updateDownloadProgress(downloadId, currentWriteOffset)
                 onProgress(downloadId, currentWriteOffset, 0L)
             }

@@ -8,7 +8,10 @@ import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import java.util.concurrent.ConcurrentHashMap
 
-class StagingFileManager(private val context: Context) {
+class StagingFileManager(
+    private val context: Context? = null,
+    private val customBaseDir: File? = null
+) {
 
     private val fileLocks = ConcurrentHashMap<String, Any>()
 
@@ -17,7 +20,8 @@ class StagingFileManager(private val context: Context) {
     }
 
     fun getStagingDirectory(): File {
-        val dir = File(context.filesDir, "staging")
+        val dir = customBaseDir?.let { File(it, "staging") }
+            ?: File(context?.filesDir ?: File(System.getProperty("java.io.tmpdir"), "azureload_test"), "staging")
         if (!dir.exists()) {
             dir.mkdirs()
         }
@@ -57,11 +61,47 @@ class StagingFileManager(private val context: Context) {
         return usable >= (requiredBytes + 50L * 1024 * 1024)
     }
 
-    fun finalizeDownload(stagingFile: File, destinationFileName: String, customDestDir: File? = null): File {
-        val targetDir = customDestDir ?: Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        if (!targetDir.exists()) {
-            targetDir.mkdirs()
+    fun getResolvedDestinationDirectory(customDestDir: File? = null): File {
+        if (customDestDir != null) {
+            if (!customDestDir.exists()) customDestDir.mkdirs()
+            return customDestDir
         }
+        if (customBaseDir != null) {
+            val dest = File(customBaseDir, "downloads")
+            if (!dest.exists()) dest.mkdirs()
+            return dest
+        }
+        try {
+            val pub = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            if (pub != null && (pub.exists() || pub.mkdirs()) && pub.canWrite()) {
+                return pub
+            }
+        } catch (_: Exception) {}
+
+        try {
+            val extFiles = context?.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+            if (extFiles != null && (extFiles.exists() || extFiles.mkdirs())) {
+                return extFiles
+            }
+        } catch (_: Exception) {}
+
+        val internalDir = File(context?.filesDir ?: File(System.getProperty("java.io.tmpdir"), "azureload_test"), "downloads")
+        if (!internalDir.exists()) internalDir.mkdirs()
+        return internalDir
+    }
+
+    fun truncateStagingFile(stagingFile: File, length: Long) {
+        synchronized(getLockFor(stagingFile.absolutePath)) {
+            if (stagingFile.exists()) {
+                RandomAccessFile(stagingFile, "rw").use { raf ->
+                    raf.setLength(length)
+                }
+            }
+        }
+    }
+
+    fun finalizeDownload(stagingFile: File, destinationFileName: String, customDestDir: File? = null): File {
+        val targetDir = getResolvedDestinationDirectory(customDestDir)
 
         var destination = File(targetDir, destinationFileName)
         // Ensure no overwrite of existing completed file by appending index

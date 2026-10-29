@@ -29,6 +29,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun AddDownloadScreen(
     initialUrl: String? = null,
+    initialCookie: String? = null,
+    initialUserAgent: String? = null,
+    initialFileName: String? = null,
+    defaultConcurrency: Int = 4,
     onBack: () -> Unit,
     onSubmitDownload: (url: String, fileName: String, concurrency: Int, headers: Map<String, String>, sha256: String?) -> Unit
 ) {
@@ -36,10 +40,17 @@ fun AddDownloadScreen(
     val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
+    val prefilledHeaders = remember {
+        val list = mutableListOf<String>()
+        if (!initialCookie.isNullOrBlank()) list.add("Cookie: $initialCookie")
+        if (!initialUserAgent.isNullOrBlank()) list.add("User-Agent: $initialUserAgent")
+        list.joinToString("\n")
+    }
+
     var url by remember { mutableStateOf(initialUrl.orEmpty()) }
-    var fileName by remember { mutableStateOf("") }
-    var concurrency by remember { mutableStateOf(4f) }
-    var customHeadersText by remember { mutableStateOf("") }
+    var fileName by remember { mutableStateOf(initialFileName.orEmpty()) }
+    var concurrency by remember { mutableStateOf(defaultConcurrency.coerceIn(1, 16).toFloat()) }
+    var customHeadersText by remember { mutableStateOf(prefilledHeaders) }
     var expectedSha256 by remember { mutableStateOf("") }
 
     var isInspecting by remember { mutableStateOf(false) }
