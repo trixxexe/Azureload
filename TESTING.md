@@ -24,10 +24,39 @@ Azureload relies on deterministic, reproducible automated tests. Core transfer l
 | **Chunk Partition Boundaries** | Verify edge cases: 1 byte, odd remainders, files smaller than 1MB, maximum concurrency clamps. | Unit test + `ChunkSchedulerTest` |
 | **Filename Sanitization** | Verify illegal characters, directory traversal (`../../etc/passwd`), and extreme filename lengths are neutralized. | Unit test + `FileNameSanitizerTest` |
 | **Header & Disposition Extraction** | Verify standard, quoted with semicolons, and RFC 5987 UTF-8 encoded `Content-Disposition` filenames. | Unit test + `CapabilityDetectorParsingTest` |
+| **Genuine 4 & 8 Connection Parallel Transfers** | Verify that transfers with 4 and 8 concurrency spawn distinct non-overlapping chunk ranges, execute in parallel, and accurately report active connections. | `MockWebServer` + `DownloadEngineIntegrationTest` |
+| **Unsupported Range / HEXAQA Simulation** | Verify that servers returning HTTP 200 to Range requests are detected as non-range, force single stream, clear chunks, and report Single Stream / 1 connection without misleading concurrency. | `MockWebServer` + `DownloadEngineIntegrationTest` |
+| **Pause & Resume File Reconstruction** | Verify that pausing midway and resuming incomplete chunks reconstructs the exact original file without data loss. | `MockWebServer` + `DownloadEngineIntegrationTest` |
+| **Process-Death Recovery from Staging** | Verify that abrupt process kill marks transfers PAUSED and recovers cleanly from partial staging data without re-fetching completed chunks. | `MockWebServer` + `DownloadEngineIntegrationTest` |
 
 ---
 
-## 3. Running Automated Tests
+## 3. Local Controlled HTTP Range Test Server & Benchmark Suite
+
+A standalone, controlled HTTP server and benchmark suite are provided in `tools/`:
+
+- `tools/range_test_server.py`: RFC 7233 / RFC 9110 compliant HTTP test server providing:
+  - Byte range chunking (`HTTP 206 Partial Content`, `Content-Range`) on `/range-test.bin`.
+  - Non-range simulation (`HTTP 200 OK` ignoring Range headers, replicating HEXAQA) on `/no-range.bin`.
+  - Simulated per-connection bandwidth limits (`?rate_limit_kbps=...`).
+  - Real-time statistics reporting on `/stats`.
+- `tools/test_benchmark.py`: Benchmark suite measuring throughput and integrity across 1 vs 4 vs 8 connections, pause/resume chunk reassembly, and unaccelerated fallback detection.
+
+### Running the Local Benchmark:
+
+```bash
+# Terminal 1: Run local range server
+python3 tools/range_test_server.py 18080
+
+# Terminal 2: Execute benchmark
+python3 tools/test_benchmark.py
+```
+
+Benchmark output demonstrates linear throughput scaling across 1 vs 4 vs 8 parallel connections under per-connection rate limits, 100% SHA-256 integrity verification, and byte-range fallback handling.
+
+---
+
+## 4. Running Automated Tests
 
 Tests are executed via Gradle Kotlin DSL in the local environment or CI:
 

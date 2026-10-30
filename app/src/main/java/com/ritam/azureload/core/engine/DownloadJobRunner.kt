@@ -122,6 +122,7 @@ class DownloadJobRunner(
                     executeSingleStreamDownload(currentDownload, stagingFile, totalBytes, supportsRange = false)
                 }
             } else {
+                repository.saveChunks(downloadId, emptyList())
                 executeSingleStreamDownload(currentDownload, stagingFile, totalBytes, supportsRange)
             }
 

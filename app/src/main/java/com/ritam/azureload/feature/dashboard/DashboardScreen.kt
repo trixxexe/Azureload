@@ -280,7 +280,7 @@ fun DownloadCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (item.supportsRanges && item.concurrency > 1) {
+                    if (item.isParallelTransfer) {
                         Surface(
                             shape = RoundedCornerShape(4.dp),
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
@@ -294,11 +294,17 @@ fun DownloadCard(
                             )
                         }
                     } else {
-                        Text(
-                            text = "Single Stream",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = if (!item.supportsRanges && item.concurrency > 1) "Single Stream (No Ranges)" else "Single Stream",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     if (item.status == DownloadStatus.DOWNLOADING && speed > 0) {

@@ -83,6 +83,20 @@ fun DetailScreen(
             "Calculating..."
         }
 
+        val isParallel = download.isParallelTransfer
+        val connectionValue = if (!isParallel) {
+            "1 Stream"
+        } else if (chunks.isNotEmpty()) {
+            if (download.status == DownloadStatus.DOWNLOADING) {
+                val activeCount = chunks.count { it.status == ChunkStatus.DOWNLOADING }
+                if (activeCount > 0) "$activeCount / ${chunks.size} Active" else "${chunks.size} Connections"
+            } else {
+                "${chunks.size} Chunks"
+            }
+        } else {
+            "${download.concurrency} Chunks"
+        }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -109,6 +123,30 @@ fun DetailScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = if (isParallel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
+                            ) {
+                                Text(
+                                    text = if (isParallel) "${chunks.size.takeIf { it > 0 } ?: download.concurrency}x Parallel" else "Single Stream",
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isParallel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            if (!download.supportsRanges && download.concurrency > 1) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "(Byte ranges unsupported by server)",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                         Spacer(modifier = Modifier.height(16.dp))
 
                         // Progress bar
@@ -220,15 +258,15 @@ fun DetailScreen(
                         modifier = Modifier.weight(1f)
                     )
                     MetricCard(
-                        title = "Concurrency",
-                        value = "${download.concurrency} Chunks",
+                        title = "Connections",
+                        value = connectionValue,
                         modifier = Modifier.weight(1f)
                     )
                 }
             }
 
             // Chunks Section
-            if (chunks.isNotEmpty()) {
+            if (isParallel && chunks.isNotEmpty()) {
                 item {
                     Text(
                         text = "Parallel Range Breakdown (${chunks.size} Connections)",
@@ -253,7 +291,26 @@ fun DetailScreen(
                         Text("Technical Metadata", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Spacer(modifier = Modifier.height(8.dp))
                         MetadataRow("Status", download.status.name)
+                        MetadataRow("Transfer Mode", if (isParallel) "Multi-Connection Parallel" else "Single Stream")
+                        MetadataRow(
+                            "Active Connections",
+                            if (isParallel) {
+                                if (chunks.isNotEmpty()) {
+                                    val active = chunks.count { it.status == ChunkStatus.DOWNLOADING }
+                                    "$active active / ${chunks.size} total"
+                                } else "${download.concurrency} parallel connections"
+                            } else {
+                                if (download.status == DownloadStatus.DOWNLOADING) "1 active stream" else "1 stream"
+                            }
+                        )
+                        MetadataRow("Configured Concurrency", "${download.concurrency} streams requested")
                         MetadataRow("Byte Ranges Supported", if (download.supportsRanges) "Yes" else "No")
+                        if (!download.supportsRanges && download.concurrency > 1) {
+                            MetadataRow(
+                                "Acceleration Fallback",
+                                "Server does not support HTTP byte ranges (HTTP 206). Engine runs safely in single-stream mode."
+                            )
+                        }
                         if (!download.eTag.isNullOrBlank()) MetadataRow("ETag", download.eTag)
                         if (!download.lastModified.isNullOrBlank()) MetadataRow("Last-Modified", download.lastModified)
                         if (!download.stagingPath.isNullOrBlank()) MetadataRow("Staging Path", download.stagingPath)

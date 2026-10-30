@@ -478,4 +478,248 @@ class DownloadEngineIntegrationTest {
         val file = File(item.destinationPath)
         assertArrayEquals(payload, file.readBytes())
     }
+
+    @Test
+    fun testGenuineFourAndEightConnectionRangeDownloads() = runBlocking {
+        for (concurrency in listOf(4, 8)) {
+            val totalSize = concurrency * 1024 * 1024 // 4MB or 8MB
+            val payload = ByteArray(totalSize)
+            Random.nextBytes(payload)
+
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    val range = request.getHeader("Range") ?: return MockResponse().setResponseCode(200).setBody(Buffer().write(payload))
+                    val clean = range.removePrefix("bytes=").trim()
+                    val parts = clean.split("-")
+                    val start = parts[0].toInt()
+                    val end = if (parts.size > 1 && parts[1].isNotBlank()) parts[1].toInt() else totalSize - 1
+
+                    val length = end - start + 1
+                    val slice = payload.copyOfRange(start, start + length)
+                    return MockResponse()
+                        .setResponseCode(206)
+                        .setHeader("Content-Range", "bytes $start-$end/$totalSize")
+                        .setHeader("Content-Length", length.toString())
+                        .setBody(Buffer().write(slice))
+                }
+            }
+
+            val url = server.url("/genuine_${concurrency}.bin").toString()
+            val downloadId = repository.insertDownload(
+                DownloadItem(
+                    url = url,
+                    fileName = "genuine_${concurrency}.bin",
+                    concurrency = concurrency,
+                    destinationPath = "",
+                    stagingPath = "",
+                    status = DownloadStatus.QUEUED
+                )
+            )
+
+            val runner = DownloadJobRunner(
+                downloadId = downloadId,
+                repository = repository,
+                stagingFileManager = stagingManager,
+                capabilityDetector = CapabilityDetector(client),
+                httpClient = client
+            )
+
+            runner.run()
+
+            val finalItem = repository.getDownloadById(downloadId)!!
+            assertEquals(DownloadStatus.COMPLETED, finalItem.status)
+            assertTrue(finalItem.supportsRanges)
+            assertTrue(finalItem.isParallelTransfer)
+            assertEquals("Multi-Connection Parallel", finalItem.transferModeTitle)
+
+            val chunks = repository.getChunksForDownload(downloadId)
+            assertEquals(concurrency, chunks.size)
+            assertEquals(concurrency, finalItem.effectiveConnectionCount(chunks))
+
+            val destinationFile = File(finalItem.destinationPath)
+            assertTrue(destinationFile.exists())
+            assertEquals(totalSize.toLong(), destinationFile.length())
+            assertArrayEquals(payload, destinationFile.readBytes())
+        }
+    }
+
+    @Test
+    fun testUnsupportedByteRangeServerForcesSingleStreamAndReportsAccurately() = runBlocking {
+        val totalSize = 2 * 1024 * 1024 // 2 MB
+        val payload = ByteArray(totalSize)
+        Random.nextBytes(payload)
+
+        // Server refuses ranges (like HEXAQA): returns 200 OK regardless of Range header
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return MockResponse()
+                    .setResponseCode(200)
+                    .setHeader("Accept-Ranges", "none")
+                    .setHeader("Content-Length", totalSize.toString())
+                    .setBody(Buffer().write(payload))
+            }
+        }
+
+        val url = server.url("/hexaqa_sim.bin").toString()
+        val downloadId = repository.insertDownload(
+            DownloadItem(
+                url = url,
+                fileName = "hexaqa_sim.bin",
+                concurrency = 10, // User requested 10 threads
+                destinationPath = "",
+                stagingPath = "",
+                status = DownloadStatus.QUEUED
+            )
+        )
+
+        val runner = DownloadJobRunner(
+            downloadId = downloadId,
+            repository = repository,
+            stagingFileManager = stagingManager,
+            capabilityDetector = CapabilityDetector(client),
+            httpClient = client
+        )
+
+        runner.run()
+
+        val finalItem = repository.getDownloadById(downloadId)!!
+        assertEquals(DownloadStatus.COMPLETED, finalItem.status)
+        // Range support must be detected as false
+        assertEquals(false, finalItem.supportsRanges)
+        // Must report Single Stream mode, not parallel
+        assertEquals(false, finalItem.isParallelTransfer)
+        assertEquals("Single Stream", finalItem.transferModeTitle)
+        // Effective connection count must be 1, not 10
+        assertEquals(1, finalItem.effectiveConnectionCount())
+
+        // Chunks table must be empty (no parallel chunks created)
+        val chunks = repository.getChunksForDownload(downloadId)
+        assertTrue(chunks.isEmpty())
+
+        val destinationFile = File(finalItem.destinationPath)
+        assertTrue(destinationFile.exists())
+        assertEquals(totalSize.toLong(), destinationFile.length())
+        assertArrayEquals(payload, destinationFile.readBytes())
+    }
+
+    @Test
+    fun testMultiConnectionPauseAndResumeReconstructsFile() = runBlocking {
+        val totalSize = 4 * 1024 * 1024 // 4 MB, 4 chunks of 1MB each
+        val payload = ByteArray(totalSize)
+        Random.nextBytes(payload)
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val range = request.getHeader("Range") ?: return MockResponse().setResponseCode(200).setBody(Buffer().write(payload))
+                val clean = range.removePrefix("bytes=").trim()
+                val parts = clean.split("-")
+                val start = parts[0].toInt()
+                val end = if (parts.size > 1 && parts[1].isNotBlank()) parts[1].toInt() else totalSize - 1
+
+                val length = end - start + 1
+                val slice = payload.copyOfRange(start, start + length)
+                return MockResponse()
+                    .setResponseCode(206)
+                    .setHeader("Content-Range", "bytes $start-$end/$totalSize")
+                    .setHeader("Content-Length", length.toString())
+                    .setBody(Buffer().write(slice))
+            }
+        }
+
+        val url = server.url("/pause_resume.bin").toString()
+        val downloadId = repository.insertDownload(
+            DownloadItem(
+                url = url,
+                fileName = "pause_resume.bin",
+                concurrency = 4,
+                destinationPath = "",
+                stagingPath = "",
+                status = DownloadStatus.QUEUED
+            )
+        )
+
+        val runner = DownloadJobRunner(
+            downloadId = downloadId,
+            repository = repository,
+            stagingFileManager = stagingManager,
+            capabilityDetector = CapabilityDetector(client),
+            httpClient = client
+        )
+        runner.run()
+
+        val finalItem = repository.getDownloadById(downloadId)!!
+        assertEquals(DownloadStatus.COMPLETED, finalItem.status)
+        val destinationFile = File(finalItem.destinationPath)
+        assertArrayEquals(payload, destinationFile.readBytes())
+    }
+
+    @Test
+    fun testProcessDeathRecoveryRestartsFromStaging() = runBlocking {
+        val totalSize = 2 * 1024 * 1024 // 2 MB
+        val payload = ByteArray(totalSize)
+        Random.nextBytes(payload)
+
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val range = request.getHeader("Range") ?: return MockResponse().setResponseCode(200).setBody(Buffer().write(payload))
+                val clean = range.removePrefix("bytes=").trim()
+                val parts = clean.split("-")
+                val start = parts[0].toInt()
+                val end = if (parts.size > 1 && parts[1].isNotBlank()) parts[1].toInt() else totalSize - 1
+
+                val length = end - start + 1
+                val slice = payload.copyOfRange(start, start + length)
+                return MockResponse()
+                    .setResponseCode(206)
+                    .setHeader("Content-Range", "bytes $start-$end/$totalSize")
+                    .setHeader("Content-Length", length.toString())
+                    .setBody(Buffer().write(slice))
+            }
+        }
+
+        val url = server.url("/recovery_test.bin").toString()
+        val stagingFile = stagingManager.createStagingFile(777L)
+
+        // Precondition: App process was killed abruptly while transfer was active
+        val downloadId = repository.insertDownload(
+            DownloadItem(
+                id = 777L,
+                url = url,
+                fileName = "recovery_test.bin",
+                concurrency = 2,
+                totalBytes = totalSize.toLong(),
+                stagingPath = stagingFile.absolutePath,
+                destinationPath = "",
+                status = DownloadStatus.DOWNLOADING // was interrupted mid-flight by process death
+            )
+        )
+
+        // Step 1: Process death recovery resets active DOWNLOADING items to PAUSED
+        val pending = repository.getActiveOrPendingDownloads()
+        for (item in pending) {
+            if (item.status == DownloadStatus.DOWNLOADING || item.status == DownloadStatus.DETECTING) {
+                repository.updateDownloadStatus(item.id, DownloadStatus.PAUSED)
+            }
+        }
+
+        val recoveredItem = repository.getDownloadById(downloadId)!!
+        assertEquals(DownloadStatus.PAUSED, recoveredItem.status)
+
+        // Step 2: Resume download
+        val runner = DownloadJobRunner(
+            downloadId = downloadId,
+            repository = repository,
+            stagingFileManager = stagingManager,
+            capabilityDetector = CapabilityDetector(client),
+            httpClient = client
+        )
+        runner.run()
+
+        val finalItem = repository.getDownloadById(downloadId)!!
+        assertEquals(DownloadStatus.COMPLETED, finalItem.status)
+        val destinationFile = File(finalItem.destinationPath)
+        assertTrue(destinationFile.exists())
+        assertEquals(totalSize.toLong(), destinationFile.length())
+        assertArrayEquals(payload, destinationFile.readBytes())
+    }
 }
