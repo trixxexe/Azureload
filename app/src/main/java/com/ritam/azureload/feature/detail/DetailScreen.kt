@@ -7,14 +7,13 @@ import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -33,17 +32,13 @@ import com.ritam.azureload.core.model.ChunkItem
 import com.ritam.azureload.core.model.ChunkStatus
 import com.ritam.azureload.core.model.DownloadItem
 import com.ritam.azureload.core.model.DownloadStatus
+import com.ritam.azureload.core.network.ErrorClassifier
 import com.ritam.azureload.core.storage.ChecksumResult
 import com.ritam.azureload.core.storage.IntegrityVerifier
 import com.ritam.azureload.feature.dashboard.formatBytes
 import com.ritam.azureload.feature.dashboard.formatSpeed
-import com.ritam.azureload.ui.components.BandwidthSparkline
-import com.ritam.azureload.ui.components.SegmentedChunkBar
-import com.ritam.azureload.ui.components.getFileVisuals
-import com.ritam.azureload.ui.theme.AzureCardBorder
-import com.ritam.azureload.ui.theme.AzureError
-import com.ritam.azureload.ui.theme.AzureSuccess
-import com.ritam.azureload.ui.theme.AzureWarning
+import com.ritam.azureload.ui.components.*
+import com.ritam.azureload.ui.theme.*
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -78,6 +73,7 @@ fun DetailScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("Transfer Details", fontWeight = FontWeight.Bold) },
@@ -94,7 +90,10 @@ fun DetailScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = Color.Transparent,
+                    titleContentColor = AzureOnSurface,
+                    navigationIconContentColor = AzureOnSurface,
+                    actionIconContentColor = AzureOnSurface
                 )
             )
         }
@@ -106,7 +105,7 @@ fun DetailScreen(
                     .padding(padding),
                 contentAlignment = Alignment.Center
             ) {
-                Text("Download not found or was removed.")
+                Text("Download not found or was removed.", color = AzureOnSurfaceVariant)
             }
             return@Scaffold
         }
@@ -166,28 +165,45 @@ fun DetailScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Hero Card: File info, progress, actions
+            // Liquid Glass Error Diagnostics Card (when failed or error present)
+            if (download.status == DownloadStatus.FAILED || !download.errorMessage.isNullOrBlank()) {
+                item {
+                    val classified = remember(download.errorMessage) {
+                        ErrorClassifier.parseOrClassify(download.errorMessage)
+                    }
+                    LiquidGlassErrorCard(
+                        error = classified,
+                        onRetry = { onRetry(download.id) },
+                        onCopyDetails = {
+                            val detail = "${classified.title}\n${classified.userMessage}\nGuidance: ${classified.recoveryGuidance}\nDetails: ${download.errorMessage}"
+                            copyToClipboard("Error Diagnostics", detail)
+                        }
+                    )
+                }
+            }
+
+            // Hero Card: File info, progress, actions in Liquid Glass
             item {
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    border = BorderStroke(1.dp, AzureCardBorder.copy(alpha = 0.5f))
+                LiquidGlassCard(
+                    cornerRadius = 24.dp,
+                    isHighlighted = download.status == DownloadStatus.DOWNLOADING,
+                    highlightColor = NeonCyan
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(modifier = Modifier.padding(18.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = visuals.accentColor.copy(alpha = 0.15f),
-                                modifier = Modifier.size(44.dp)
+                            Box(
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .clip(SquircleShape(14.dp))
+                                    .background(visuals.accentColor.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = visuals.icon,
-                                        contentDescription = null,
-                                        tint = visuals.accentColor,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = visuals.icon,
+                                    contentDescription = null,
+                                    tint = visuals.accentColor,
+                                    modifier = Modifier.size(26.dp)
+                                )
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
@@ -196,9 +212,10 @@ fun DetailScreen(
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 17.sp,
                                     maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = AzureOnSurface
                                 )
-                                Spacer(modifier = Modifier.height(2.dp))
+                                Spacer(modifier = Modifier.height(3.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = visuals.categoryLabel,
@@ -207,24 +224,23 @@ fun DetailScreen(
                                         color = visuals.accentColor
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Surface(
-                                        shape = RoundedCornerShape(4.dp),
-                                        color = when (download.status) {
-                                            DownloadStatus.COMPLETED -> AzureSuccess.copy(alpha = 0.15f)
-                                            DownloadStatus.FAILED -> AzureError.copy(alpha = 0.15f)
-                                            DownloadStatus.DOWNLOADING -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                            else -> AzureWarning.copy(alpha = 0.15f)
-                                        }
+                                    LiquidGlassPill(
+                                        tint = when (download.status) {
+                                            DownloadStatus.COMPLETED -> AzureSuccess
+                                            DownloadStatus.FAILED -> AzureError
+                                            DownloadStatus.DOWNLOADING -> NeonCyan
+                                            else -> AzureWarning
+                                        },
+                                        cornerRadius = 6.dp
                                     ) {
                                         Text(
                                             text = download.status.name,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = when (download.status) {
                                                 DownloadStatus.COMPLETED -> AzureSuccess
                                                 DownloadStatus.FAILED -> AzureError
-                                                DownloadStatus.DOWNLOADING -> MaterialTheme.colorScheme.primary
+                                                DownloadStatus.DOWNLOADING -> NeonCyan
                                                 else -> AzureWarning
                                             }
                                         )
@@ -233,24 +249,22 @@ fun DetailScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(14.dp))
 
-                        // URL with Copy action
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                        // URL with Copy action in Liquid Glass Pill
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .clip(SquircleShape(12.dp))
+                                .background(Color(0x14FFFFFF))
                                 .clickable { copyToClipboard("URL", download.url) }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = download.url,
                                     fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = AzureOnSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f)
@@ -260,7 +274,7 @@ fun DetailScreen(
                                     Icons.Default.ContentCopy,
                                     contentDescription = "Copy URL",
                                     modifier = Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = AzureOnSurfaceVariant
                                 )
                             }
                         }
@@ -269,16 +283,15 @@ fun DetailScreen(
 
                         // Transfer mode chip
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Surface(
-                                shape = RoundedCornerShape(4.dp),
-                                color = if (isParallel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
+                            LiquidGlassPill(
+                                tint = if (isParallel) NeonCyan else null,
+                                cornerRadius = 8.dp
                             ) {
                                 Text(
                                     text = if (isParallel) "${download.effectiveConnectionCount(chunks)}x Multi-Connection Parallel" else "Single Stream",
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                    fontSize = 12.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (isParallel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (isParallel) NeonCyan else AzureOnSurfaceVariant
                                 )
                             }
                             if (!download.supportsRanges && download.concurrency > 1 &&
@@ -287,7 +300,7 @@ fun DetailScreen(
                                 Text(
                                     text = "(Byte ranges unsupported by server)",
                                     fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = AzureOnSurfaceVariant
                                 )
                             }
                         }
@@ -300,13 +313,13 @@ fun DetailScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp)),
+                                .clip(SquircleShape(4.dp)),
                             color = when (download.status) {
                                 DownloadStatus.COMPLETED -> AzureSuccess
                                 DownloadStatus.FAILED -> AzureError
-                                else -> MaterialTheme.colorScheme.primary
+                                else -> NeonCyan
                             },
-                            trackColor = MaterialTheme.colorScheme.surface
+                            trackColor = Color(0x20FFFFFF)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
 
@@ -317,13 +330,14 @@ fun DetailScreen(
                             Text(
                                 text = "${formatBytes(downloadedBytes)} / ${if (totalBytes > 0) formatBytes(totalBytes) else "Unknown"}",
                                 fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                color = AzureOnSurface
                             )
                             Text(
                                 text = "${(progress * 100).toInt()}%",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = NeonCyan
                             )
                         }
 
@@ -336,68 +350,69 @@ fun DetailScreen(
                         ) {
                             when (download.status) {
                                 DownloadStatus.DOWNLOADING -> {
-                                    Button(
+                                    LiquidGlassButton(
                                         onClick = { onPause(download.id) },
                                         modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(containerColor = AzureWarning)
+                                        accentColor = AzureWarning
                                     ) {
-                                        Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureBlack)
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Pause")
+                                        Text("Pause", color = PureBlack, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 DownloadStatus.PAUSED -> {
-                                    Button(
+                                    LiquidGlassButton(
                                         onClick = { onResume(download.id) },
                                         modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                        accentColor = AzurePrimary
                                     ) {
-                                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureBlack)
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Resume")
+                                        Text("Resume", color = PureBlack, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 DownloadStatus.FAILED -> {
-                                    Button(
+                                    LiquidGlassButton(
                                         onClick = { onRetry(download.id) },
                                         modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                        accentColor = AzurePrimary
                                     ) {
-                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureBlack)
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Retry")
+                                        Text("Retry", color = PureBlack, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 DownloadStatus.COMPLETED -> {
-                                    Button(
+                                    LiquidGlassButton(
                                         onClick = { onOpenFile(download) },
                                         modifier = Modifier.weight(1f),
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                                        accentColor = AzurePrimary
                                     ) {
-                                        Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureBlack)
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Open File")
+                                        Text("Open File", color = PureBlack, fontWeight = FontWeight.Bold)
                                     }
-                                    OutlinedButton(
+                                    LiquidGlassButton(
                                         onClick = { onShareFile(download) },
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.weight(1f),
+                                        accentColor = AzureSecondary
                                     ) {
-                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureBlack)
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Share")
+                                        Text("Share", color = PureBlack, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 else -> {}
                             }
 
-                            OutlinedButton(
+                            LiquidGlassButton(
                                 onClick = { showDeleteConfirmDialog = true },
                                 modifier = Modifier.weight(if (download.status == DownloadStatus.COMPLETED) 0.8f else 1f),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = AzureError)
+                                accentColor = AzureError
                             ) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(18.dp), tint = AzureError)
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text(if (download.status == DownloadStatus.COMPLETED) "Delete" else "Cancel")
+                                Text(if (download.status == DownloadStatus.COMPLETED) "Delete" else "Cancel", color = AzureError)
                             }
                         }
                     }
@@ -410,17 +425,17 @@ fun DetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    MetricCard(
+                    LiquidGlassMetricCard(
                         title = "Speed",
                         value = if (download.status == DownloadStatus.DOWNLOADING) formatSpeed(speed) else "0 KB/s",
                         modifier = Modifier.weight(1f)
                     )
-                    MetricCard(
+                    LiquidGlassMetricCard(
                         title = "ETA",
                         value = etaText,
                         modifier = Modifier.weight(1f)
                     )
-                    MetricCard(
+                    LiquidGlassMetricCard(
                         title = "Streams",
                         value = connectionValue,
                         modifier = Modifier.weight(1f)
@@ -428,15 +443,11 @@ fun DetailScreen(
                 }
             }
 
-            // Real-Time Speed Graph Card (Sparkline / Area Chart)
+            // Real-Time Speed Graph Card (Sparkline)
             if (speedHistory.isNotEmpty() || download.status == DownloadStatus.DOWNLOADING) {
                 item {
-                    Card(
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        border = BorderStroke(1.dp, AzureCardBorder.copy(alpha = 0.5f))
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
+                    LiquidGlassCard(cornerRadius = 20.dp) {
+                        Column(modifier = Modifier.padding(16.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -446,32 +457,33 @@ fun DetailScreen(
                                     Icon(
                                         Icons.Default.ShowChart,
                                         contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        tint = NeonCyan,
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = "Speed Analytics",
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp
+                                        fontSize = 14.sp,
+                                        color = AzureOnSurface
                                     )
                                 }
                                 Text(
                                     text = if (speedHistory.isNotEmpty()) "Avg: ${formatSpeed(speedHistory.average().toLong())}" else "",
                                     fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = AzureOnSurfaceVariant
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
 
                             BandwidthSparkline(
                                 history = speedHistory,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(90.dp),
-                                lineColor = MaterialTheme.colorScheme.primary,
-                                fillColor = MaterialTheme.colorScheme.primary,
+                                lineColor = NeonCyan,
+                                fillColor = AzurePrimary,
                                 showGridAndLabels = true,
                                 currentSpeed = speed
                             )
@@ -482,31 +494,27 @@ fun DetailScreen(
 
             // Bandwidth Throttling / Speed Limit Card
             item {
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    border = BorderStroke(1.dp, AzureCardBorder.copy(alpha = 0.5f))
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                LiquidGlassCard(cornerRadius = 20.dp) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.Speed, contentDescription = null, tint = AzurePrimary, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Bandwidth Throttle", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Bandwidth Throttle", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = AzureOnSurface)
                             }
                             Text(
                                 text = if (currentLimitBytes > 0) formatSpeed(currentLimitBytes) else "Unlimited",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (currentLimitBytes > 0) AzureWarning else MaterialTheme.colorScheme.primary
+                                color = if (currentLimitBytes > 0) AzureWarning else AzurePrimary
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         // Preset chips
                         Row(
@@ -524,15 +532,22 @@ fun DetailScreen(
                                 "10 MB/s" to 10L * 1024L * 1024L
                             )
                             presets.forEach { (label, bytes) ->
-                                FilterChip(
-                                    selected = currentLimitBytes == bytes,
+                                val isSelected = currentLimitBytes == bytes
+                                LiquidGlassPill(
+                                    tint = if (isSelected) AzurePrimary else null,
+                                    cornerRadius = 10.dp,
                                     onClick = {
                                         currentLimitBytes = bytes
                                         onUpdateSpeedLimit(download.id, bytes)
-                                    },
-                                    label = { Text(label, fontSize = 11.sp) },
-                                    shape = RoundedCornerShape(8.dp)
-                                )
+                                    }
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isSelected) PureBlack else AzureOnSurface
+                                    )
+                                }
                             }
                         }
                     }
@@ -552,12 +567,12 @@ fun DetailScreen(
                                 text = "Parallel Range Breakdown (${chunks.size} Connections)",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = AzurePrimary
                             )
                             Text(
                                 text = "${chunks.count { it.status == ChunkStatus.COMPLETED }}/${chunks.size} Done",
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = AzureOnSurfaceVariant
                             )
                         }
                         Spacer(modifier = Modifier.height(8.dp))
@@ -566,27 +581,22 @@ fun DetailScreen(
                 }
 
                 items(chunks, key = { it.id }) { chunk ->
-                    ChunkCard(chunk)
+                    LiquidGlassChunkCard(chunk)
                 }
             }
 
             // Checksum Calculation & Integrity Card
             item {
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    border = BorderStroke(1.dp, AzureCardBorder.copy(alpha = 0.5f))
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
+                LiquidGlassCard(cornerRadius = 20.dp) {
+                    Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = AzureSuccess, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("File Checksum & Verification", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("File Checksum & Verification", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = AzureOnSurface)
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
 
-                        // Target file status on disk (only computed on fully completed files)
                         val targetFile = if (download.status == DownloadStatus.COMPLETED && download.destinationPath.isNotBlank()) {
                             File(download.destinationPath)
                         } else null
@@ -594,7 +604,7 @@ fun DetailScreen(
                         val fileExists = targetFile?.exists() == true
 
                         if (fileExists && targetFile != null) {
-                            Button(
+                            LiquidGlassButton(
                                 onClick = {
                                     isCalculatingChecksum = true
                                     coroutineScope.launch {
@@ -607,21 +617,22 @@ fun DetailScreen(
                                 },
                                 enabled = !isCalculatingChecksum,
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(8.dp)
+                                accentColor = AzureSuccess,
+                                cornerRadius = 12.dp
                             ) {
                                 if (isCalculatingChecksum) {
-                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = PureBlack)
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Computing SHA-256 & MD5...")
+                                    Text("Computing SHA-256 & MD5...", color = PureBlack, fontWeight = FontWeight.Bold)
                                 } else {
-                                    Icon(Icons.Default.Calculate, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Icon(Icons.Default.Calculate, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureBlack)
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text(if (checksumResult == null) "Calculate File Checksums" else "Re-calculate Checksums")
+                                    Text(if (checksumResult == null) "Calculate File Checksums" else "Re-calculate Checksums", color = PureBlack, fontWeight = FontWeight.Bold)
                                 }
                             }
 
                             checksumResult?.let { res ->
-                                Spacer(modifier = Modifier.height(12.dp))
+                                Spacer(modifier = Modifier.height(14.dp))
 
                                 // SHA-256 result row
                                 Column {
@@ -630,29 +641,31 @@ fun DetailScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("SHA-256 Hash", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("SHA-256 Hash", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
                                         IconButton(
                                             onClick = { copyToClipboard("SHA-256", res.sha256) },
                                             modifier = Modifier.size(28.dp)
                                         ) {
-                                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy SHA-256", modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy SHA-256", modifier = Modifier.size(16.dp), tint = AzureOnSurface)
                                         }
                                     }
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-                                        modifier = Modifier.fillMaxWidth()
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(SquircleShape(8.dp))
+                                            .background(Color(0x18FFFFFF))
+                                            .padding(10.dp)
                                     ) {
                                         Text(
                                             text = res.sha256,
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 11.sp,
-                                            modifier = Modifier.padding(8.dp)
+                                            color = AzureOnSurface
                                         )
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
 
                                 // MD5 result row
                                 Column {
@@ -661,142 +674,96 @@ fun DetailScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Text("MD5 Hash", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        Text("MD5 Hash", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
                                         IconButton(
                                             onClick = { copyToClipboard("MD5", res.md5) },
                                             modifier = Modifier.size(28.dp)
                                         ) {
-                                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy MD5", modifier = Modifier.size(16.dp))
+                                            Icon(Icons.Default.ContentCopy, contentDescription = "Copy MD5", modifier = Modifier.size(16.dp), tint = AzureOnSurface)
                                         }
                                     }
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f),
-                                        modifier = Modifier.fillMaxWidth()
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(SquircleShape(8.dp))
+                                            .background(Color(0x18FFFFFF))
+                                            .padding(10.dp)
                                     ) {
                                         Text(
                                             text = res.md5,
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 11.sp,
-                                            modifier = Modifier.padding(8.dp)
+                                            color = AzureOnSurface
                                         )
                                     }
                                 }
 
-                                // Expected hash comparison
-                                if (!download.expectedSha256.isNullOrBlank()) {
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    val isMatch = res.sha256.equals(download.expectedSha256.trim(), ignoreCase = true)
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = if (isMatch) AzureSuccess.copy(alpha = 0.15f) else AzureError.copy(alpha = 0.15f),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = if (isMatch) Icons.Default.CheckCircle else Icons.Default.Cancel,
-                                                contentDescription = null,
-                                                tint = if (isMatch) AzureSuccess else AzureError,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = if (isMatch) "Expected SHA-256 Verified Match" else "SHA-256 Checksum Mismatch!",
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isMatch) AzureSuccess else AzureError
-                                            )
-                                        }
-                                    }
-                                }
-
-                                // Live comparator text field
-                                Spacer(modifier = Modifier.height(10.dp))
+                                // Interactive Compare Checksum input
+                                Spacer(modifier = Modifier.height(12.dp))
                                 OutlinedTextField(
                                     value = hashInputToCompare,
                                     onValueChange = { hashInputToCompare = it },
-                                    label = { Text("Compare Against Expected Checksum", fontSize = 11.sp) },
-                                    placeholder = { Text("Paste MD5 or SHA-256...", fontSize = 11.sp) },
-                                    singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
-                                    trailingIcon = {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            IconButton(
-                                                onClick = {
-                                                    val clip = (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
-                                                        .primaryClip?.getItemAt(0)?.text?.toString()?.trim()
-                                                    if (!clip.isNullOrBlank()) {
-                                                        hashInputToCompare = clip
-                                                    }
-                                                }
-                                            ) {
-                                                Icon(Icons.Default.ContentPaste, contentDescription = "Paste from clipboard", modifier = Modifier.size(18.dp))
-                                            }
-                                            if (hashInputToCompare.isNotBlank()) {
-                                                val cleanInput = hashInputToCompare.trim()
-                                                val matchesSha = res.sha256.equals(cleanInput, ignoreCase = true)
-                                                val matchesMd5 = res.md5.equals(cleanInput, ignoreCase = true)
-                                                val matched = matchesSha || matchesMd5
-                                                Icon(
-                                                    imageVector = if (matched) Icons.Default.CheckCircle else Icons.Default.Cancel,
-                                                    contentDescription = null,
-                                                    tint = if (matched) AzureSuccess else AzureError,
-                                                    modifier = Modifier.padding(end = 6.dp).size(18.dp)
-                                                )
-                                            }
-                                        }
-                                    }
+                                    label = { Text("Compare with Expected Hash") },
+                                    placeholder = { Text("Paste SHA-256 or MD5 to compare...", fontSize = 12.sp) },
+                                    singleLine = true,
+                                    shape = SquircleShape(10.dp),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        unfocusedContainerColor = Color(0x10FFFFFF),
+                                        focusedContainerColor = Color(0x1EFFFFFF)
+                                    )
                                 )
+
+                                if (hashInputToCompare.isNotBlank()) {
+                                    val cleaned = hashInputToCompare.trim()
+                                    val matchesSha = cleaned.equals(res.sha256, ignoreCase = true)
+                                    val matchesMd5 = cleaned.equals(res.md5, ignoreCase = true)
+                                    val isMatch = matchesSha || matchesMd5
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    LiquidGlassPill(
+                                        tint = if (isMatch) AzureSuccess else AzureError,
+                                        cornerRadius = 8.dp
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isMatch) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                            contentDescription = null,
+                                            tint = if (isMatch) AzureSuccess else AzureError,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (isMatch) "Checksum Verified (Matches ${if (matchesSha) "SHA-256" else "MD5"})" else "Checksum Mismatch! File may be corrupt or altered.",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = if (isMatch) AzureSuccess else AzureError
+                                        )
+                                    }
+                                }
                             }
                         } else {
                             Text(
-                                text = if (download.status == DownloadStatus.DOWNLOADING || download.status == DownloadStatus.QUEUED) {
-                                    "Checksum verification will be available once the download is complete."
-                                } else {
-                                    "Completed file is not available on device storage to compute checksums."
-                                },
+                                text = "Checksum computation available once the file has completed downloading and is stored on disk.",
                                 fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = AzureOnSurfaceVariant
                             )
                         }
                     }
                 }
             }
 
-            // Technical Metadata Card
+            // Technical Metadata Overview Card
             item {
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                    border = BorderStroke(1.dp, AzureCardBorder.copy(alpha = 0.5f))
-                ) {
-                    Column(modifier = Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Technical Metadata", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        }
-                        Spacer(modifier = Modifier.height(10.dp))
-                        MetadataRow("Status", download.status.name)
-                        MetadataRow("Transfer Mode", if (isParallel) "Multi-Connection Parallel" else "Single Stream")
-                        MetadataRow(
-                            "Active Connections",
-                            if (isParallel) {
-                                val totalConnections = download.effectiveConnectionCount(chunks)
-                                if (download.status == DownloadStatus.DOWNLOADING) {
-                                    val active = chunks.count { it.status == ChunkStatus.DOWNLOADING }
-                                    "$active active / $totalConnections total"
-                                } else {
-                                    "0 active / $totalConnections total"
-                                }
-                            } else {
-                                if (download.status == DownloadStatus.DOWNLOADING) "1 active stream" else "0 active streams"
-                            }
+                LiquidGlassCard(cornerRadius = 20.dp) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Technical Metadata",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = AzurePrimary
                         )
-                        MetadataRow("Configured Concurrency", "${download.concurrency} streams requested")
+                        Spacer(modifier = Modifier.height(10.dp))
+                        MetadataRow("Download ID", "#${download.id}")
                         MetadataRow("Byte Ranges Supported", if (download.supportsRanges) "Yes" else "No")
                         if (!download.supportsRanges && download.concurrency > 1 &&
                             download.status != DownloadStatus.QUEUED && download.status != DownloadStatus.DETECTING) {
@@ -814,7 +781,7 @@ fun DetailScreen(
                         if (download.speedLimitBytesPerSec > 0) MetadataRow("Speed Throttle", formatSpeed(download.speedLimitBytesPerSec))
                         if (!download.errorMessage.isNullOrBlank()) {
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text("Error: ${download.errorMessage}", color = AzureError, fontSize = 12.sp)
+                            Text("Diagnostic Log: ${download.errorMessage}", color = AzureError, fontSize = 11.sp)
                         }
                     }
                 }
@@ -861,9 +828,6 @@ fun DetailScreen(
                     Button(
                         onClick = {
                             showDeleteConfirmDialog = false
-                            if (deleteFileOnDisk && download.status == DownloadStatus.COMPLETED && download.destinationPath.isNotBlank()) {
-                                try { File(download.destinationPath).delete() } catch (_: Exception) {}
-                            }
                             onCancel(download.id)
                             onBack()
                         },
@@ -883,28 +847,26 @@ fun DetailScreen(
 }
 
 @Composable
-fun MetricCard(title: String, value: String, modifier: Modifier = Modifier) {
-    Card(
+fun LiquidGlassMetricCard(title: String, value: String, modifier: Modifier = Modifier) {
+    LiquidGlassCard(
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        border = BorderStroke(1.dp, AzureCardBorder.copy(alpha = 0.5f))
+        cornerRadius = 14.dp
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(title, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(title.uppercase(), fontSize = 10.sp, color = AzureOnSurfaceVariant, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(value, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, color = AzureOnSurface)
         }
     }
 }
 
 @Composable
-fun ChunkCard(chunk: ChunkItem) {
-    Card(
+fun LiquidGlassChunkCard(chunk: ChunkItem) {
+    LiquidGlassCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, AzureCardBorder.copy(alpha = 0.35f))
+        cornerRadius = 14.dp,
+        isHighlighted = chunk.status == ChunkStatus.DOWNLOADING,
+        highlightColor = NeonCyan
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(
@@ -915,44 +877,44 @@ fun ChunkCard(chunk: ChunkItem) {
                 Text(
                     text = "Connection #${chunk.chunkIndex + 1}",
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp
+                    fontSize = 13.sp,
+                    color = AzureOnSurface
                 )
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = when (chunk.status) {
-                        ChunkStatus.COMPLETED -> AzureSuccess.copy(alpha = 0.15f)
-                        ChunkStatus.DOWNLOADING -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                        ChunkStatus.FAILED -> AzureError.copy(alpha = 0.15f)
-                        else -> MaterialTheme.colorScheme.surfaceVariant
-                    }
+                LiquidGlassPill(
+                    tint = when (chunk.status) {
+                        ChunkStatus.COMPLETED -> AzureSuccess
+                        ChunkStatus.DOWNLOADING -> NeonCyan
+                        ChunkStatus.FAILED -> AzureError
+                        else -> null
+                    },
+                    cornerRadius = 6.dp
                 ) {
                     Text(
                         text = chunk.status.name,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = when (chunk.status) {
                             ChunkStatus.COMPLETED -> AzureSuccess
-                            ChunkStatus.DOWNLOADING -> MaterialTheme.colorScheme.primary
+                            ChunkStatus.DOWNLOADING -> NeonCyan
                             ChunkStatus.FAILED -> AzureError
-                            else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            else -> AzureOnSurfaceVariant
                         }
                     )
                 }
             }
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             LinearProgressIndicator(
                 progress = { chunk.progress },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(2.dp)),
+                    .height(5.dp)
+                    .clip(SquircleShape(3.dp)),
                 color = when (chunk.status) {
                     ChunkStatus.COMPLETED -> AzureSuccess
                     ChunkStatus.FAILED -> AzureError
-                    else -> MaterialTheme.colorScheme.primary
+                    else -> NeonCyan
                 },
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                trackColor = Color(0x20FFFFFF)
             )
             Spacer(modifier = Modifier.height(6.dp))
             Row(
@@ -963,12 +925,13 @@ fun ChunkCard(chunk: ChunkItem) {
                     text = "Range: ${chunk.startOffset} .. ${chunk.endOffset}",
                     fontFamily = FontFamily.Monospace,
                     fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = AzureOnSurfaceVariant
                 )
                 Text(
                     text = "${formatBytes(chunk.downloadedBytes)} / ${formatBytes(chunk.totalSize)} (${(chunk.progress * 100).toInt()}%)",
                     fontSize = 10.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    color = AzureOnSurface
                 )
             }
         }
@@ -980,10 +943,10 @@ fun MetadataRow(label: String, value: String) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp),
+            .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1)
+        Text(label, fontSize = 11.sp, color = AzureOnSurfaceVariant)
+        Text(value, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, color = AzureOnSurface)
     }
 }

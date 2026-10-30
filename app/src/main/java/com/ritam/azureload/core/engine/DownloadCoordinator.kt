@@ -214,6 +214,7 @@ class DownloadCoordinator(
 
     fun cancelDownload(downloadId: Long) {
         pauseDownload(downloadId)
+        _speedHistory.value = _speedHistory.value.toMutableMap().apply { remove(downloadId) }
         scope.launch {
             val item = repository.getDownloadById(downloadId)
             if (item != null && item.stagingPath.isNotBlank()) {

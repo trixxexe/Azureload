@@ -5,7 +5,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -13,8 +12,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -31,12 +28,9 @@ import com.ritam.azureload.core.model.DownloadItem
 import com.ritam.azureload.core.model.DownloadStatus
 import com.ritam.azureload.core.model.FileCategory
 import com.ritam.azureload.core.model.getFileCategory
-import com.ritam.azureload.ui.components.BandwidthSparkline
-import com.ritam.azureload.ui.components.getFileVisuals
-import com.ritam.azureload.ui.theme.AzureCardBorder
-import com.ritam.azureload.ui.theme.AzureError
-import com.ritam.azureload.ui.theme.AzureSuccess
-import com.ritam.azureload.ui.theme.AzureWarning
+import com.ritam.azureload.core.network.ErrorClassifier
+import com.ritam.azureload.ui.components.*
+import com.ritam.azureload.ui.theme.*
 
 enum class FilterTab { ALL, ACTIVE, COMPLETED, FAILED }
 
@@ -109,25 +103,25 @@ fun DashboardScreen(
                 else item.getFileCategory() == selectedCategory
             }
             .filter { item ->
-                if (searchQuery.isBlank()) true
+                val q = searchQuery.trim()
+                if (q.isBlank()) true
                 else {
-                    val q = searchQuery.trim()
                     item.fileName.contains(q, ignoreCase = true) ||
-                        item.url.contains(q, ignoreCase = true) ||
-                        (item.mimeType?.contains(q, ignoreCase = true) == true) ||
-                        item.status.name.contains(q, ignoreCase = true)
+                            item.url.contains(q, ignoreCase = true) ||
+                            (item.mimeType?.contains(q, ignoreCase = true) == true) ||
+                            item.status.name.contains(q, ignoreCase = true)
+                }
+            }
+            .sortedWith { a, b ->
+                when (selectedSort) {
+                    SortOption.DATE_DESC -> b.createdAt.compareTo(a.createdAt)
+                    SortOption.DATE_ASC -> a.createdAt.compareTo(b.createdAt)
+                    SortOption.SIZE_DESC -> b.totalBytes.compareTo(a.totalBytes)
+                    SortOption.SIZE_ASC -> a.totalBytes.compareTo(b.totalBytes)
+                    SortOption.NAME_ASC -> a.fileName.compareTo(b.fileName, ignoreCase = true)
                 }
             }
             .toList()
-            .let { list ->
-                when (selectedSort) {
-                    SortOption.DATE_DESC -> list.sortedByDescending { it.createdAt }
-                    SortOption.DATE_ASC -> list.sortedBy { it.createdAt }
-                    SortOption.SIZE_DESC -> list.sortedByDescending { it.totalBytes }
-                    SortOption.SIZE_ASC -> list.sortedBy { it.totalBytes }
-                    SortOption.NAME_ASC -> list.sortedBy { it.fileName.lowercase() }
-                }
-            }
     }
 
     // Total active speed
@@ -136,64 +130,68 @@ fun DashboardScreen(
     }
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(36.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(SquircleShape(10.dp))
+                                .background(AzurePrimary.copy(alpha = 0.22f)),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Default.CloudDownload,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = null,
+                                tint = NeonCyan,
+                                modifier = Modifier.size(22.dp)
+                            )
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
                                 text = "Azureload",
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 19.sp,
-                                color = MaterialTheme.colorScheme.onSurface
+                                fontSize = 18.sp,
+                                color = AzureOnSurface
                             )
                             Text(
-                                text = "Multi-Connection Accelerator",
+                                text = "Liquid Multi-Stream Accelerator",
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.primary
+                                color = NeonCyan
                             )
                         }
                     }
                 },
                 actions = {
                     IconButton(onClick = onNavigateToBrowser) {
-                        Icon(Icons.Default.Language, contentDescription = "Built-in Browser")
+                        Icon(Icons.Default.Language, contentDescription = "Built-in Browser", tint = AzureOnSurface)
                     }
                     IconButton(onClick = onNavigateToDiagnostics) {
-                        Icon(Icons.Default.BugReport, contentDescription = "Diagnostics")
+                        Icon(Icons.Default.BugReport, contentDescription = "Diagnostics", tint = AzureOnSurface)
                     }
                     IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = AzureOnSurface)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = Color.Transparent
                 )
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            LiquidGlassButton(
                 onClick = onNavigateToAdd,
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("New Download", fontWeight = FontWeight.SemiBold) },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            )
+                accentColor = AzurePrimary,
+                cornerRadius = 20.dp,
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, tint = PureBlack, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("New Download", fontWeight = FontWeight.ExtraBold, color = PureBlack, fontSize = 14.sp)
+            }
         }
     ) { padding ->
         Column(
@@ -207,40 +205,46 @@ fun DashboardScreen(
                 enter = fadeIn(),
                 exit = fadeOut()
             ) {
-                Card(
+                LiquidGlassCard(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                    ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    cornerRadius = 18.dp,
+                    isHighlighted = true,
+                    highlightColor = NeonCyan
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Speed,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(24.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(SquircleShape(8.dp))
+                                .background(NeonCyan.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Speed,
+                                contentDescription = null,
+                                tint = NeonCyan,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Total Speed: ${formatSpeed(totalActiveSpeed)}",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = AzureOnSurface
                             )
                             Text(
                                 text = "$activeCount active transfers running",
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = AzureOnSurfaceVariant
                             )
                         }
 
@@ -251,52 +255,51 @@ fun DashboardScreen(
                                 modifier = Modifier
                                     .width(72.dp)
                                     .height(30.dp),
-                                lineColor = MaterialTheme.colorScheme.primary,
-                                fillColor = MaterialTheme.colorScheme.primary
+                                lineColor = NeonCyan,
+                                fillColor = AzurePrimary
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                         }
 
-                        FilledTonalButton(
+                        LiquidGlassButton(
                             onClick = onPauseAll,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            colors = ButtonDefaults.filledTonalButtonColors(
-                                containerColor = AzureWarning.copy(alpha = 0.2f),
-                                contentColor = AzureWarning
-                            )
+                            accentColor = AzureWarning,
+                            cornerRadius = 10.dp,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                         ) {
-                            Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(14.dp), tint = PureBlack)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Pause All", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Pause All", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PureBlack)
                         }
                     }
                 }
             }
 
-            // Search Bar
+            // Search Bar in Squircle shape
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
-                placeholder = { Text("Search by name, status, MIME, or URL...", fontSize = 13.sp) },
+                placeholder = { Text("Search by name, status, MIME, or URL...", fontSize = 13.sp, color = AzureOnSurfaceVariant) },
                 leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.Default.Search, contentDescription = "Search", tint = AzureOnSurfaceVariant)
                 },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear search")
+                            Icon(Icons.Default.Clear, contentDescription = "Clear search", tint = AzureOnSurfaceVariant)
                         }
                     }
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(12.dp),
+                shape = SquircleShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f)
+                    unfocusedContainerColor = Color(0x10FFFFFF),
+                    focusedContainerColor = Color(0x1EFFFFFF),
+                    unfocusedBorderColor = Color(0x22FFFFFF),
+                    focusedBorderColor = AzurePrimary
                 )
             )
 
@@ -305,34 +308,38 @@ fun DashboardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 FileCategory.values().forEach { cat ->
-                    FilterChip(
-                        selected = selectedCategory == cat,
-                        onClick = { selectedCategory = cat },
-                        label = { Text(cat.displayName, fontSize = 12.sp) },
-                        shape = RoundedCornerShape(8.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
-                            selectedLabelColor = MaterialTheme.colorScheme.primary
+                    val isSelected = selectedCategory == cat
+                    LiquidGlassPill(
+                        tint = if (isSelected) AzurePrimary else null,
+                        cornerRadius = 10.dp,
+                        onClick = { selectedCategory = cat }
+                    ) {
+                        Text(
+                            text = cat.displayName,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) PureBlack else AzureOnSurface
                         )
-                    )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(4.dp))
 
-                // Sort Chip / Dropdown
+                // Sort Dropdown
                 Box {
-                    AssistChip(
-                        onClick = { showSortMenu = true },
-                        label = { Text(selectedSort.title, fontSize = 12.sp) },
-                        leadingIcon = {
-                            Icon(Icons.Default.Sort, contentDescription = null, modifier = Modifier.size(16.dp))
-                        },
-                        shape = RoundedCornerShape(8.dp)
-                    )
+                    LiquidGlassPill(
+                        cornerRadius = 10.dp,
+                        onClick = { showSortMenu = true }
+                    ) {
+                        Icon(Icons.Default.Sort, contentDescription = null, modifier = Modifier.size(14.dp), tint = AzureOnSurface)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(selectedSort.title, fontSize = 11.sp, color = AzureOnSurface)
+                    }
                     DropdownMenu(
                         expanded = showSortMenu,
                         onDismissRequest = { showSortMenu = false }
@@ -350,30 +357,35 @@ fun DashboardScreen(
                 }
             }
 
-            // Filter Tabs
-            TabRow(
-                selectedTabIndex = selectedTab.ordinal,
-                containerColor = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.primary
+            // Filter Tabs Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 FilterTab.values().forEach { tab ->
-                    Tab(
-                        selected = selectedTab == tab,
-                        onClick = { selectedTab = tab },
-                        text = {
-                            val count = when (tab) {
-                                FilterTab.ALL -> downloads.size
-                                FilterTab.ACTIVE -> activeCount
-                                FilterTab.COMPLETED -> completedCount
-                                FilterTab.FAILED -> failedOrPausedCount
-                            }
-                            Text(
-                                text = "${tab.name.lowercase().replaceFirstChar { it.uppercase() }} ($count)",
-                                fontSize = 13.sp,
-                                fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Normal
-                            )
-                        }
-                    )
+                    val isSelected = selectedTab == tab
+                    val count = when (tab) {
+                        FilterTab.ALL -> downloads.size
+                        FilterTab.ACTIVE -> activeCount
+                        FilterTab.COMPLETED -> completedCount
+                        FilterTab.FAILED -> failedOrPausedCount
+                    }
+                    LiquidGlassPill(
+                        modifier = Modifier.weight(1f),
+                        tint = if (isSelected) AzurePrimary else null,
+                        cornerRadius = 12.dp,
+                        onClick = { selectedTab = tab }
+                    ) {
+                        Text(
+                            text = "${tab.name.lowercase().replaceFirstChar { it.uppercase() }} ($count)",
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) PureBlack else AzureOnSurface,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
 
@@ -382,36 +394,40 @@ fun DashboardScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = "${filteredList.size} of ${downloads.size} items",
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = AzureOnSurfaceVariant
                     )
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (failedOrPausedCount > 0) {
-                            TextButton(
+                            LiquidGlassButton(
                                 onClick = onResumeAll,
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                accentColor = AzurePrimary,
+                                cornerRadius = 8.dp,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(14.dp), tint = PureBlack)
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Resume All", fontSize = 12.sp)
+                                Text("Resume All", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PureBlack)
                             }
                         }
 
                         if (completedCount > 0) {
-                            TextButton(
+                            LiquidGlassButton(
                                 onClick = { showClearCompletedDialog = true },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                accentColor = AzureOnSurfaceVariant,
+                                cornerRadius = 8.dp,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Icon(Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(14.dp), tint = AzureOnSurface)
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Clear Finished", fontSize = 12.sp)
+                                Text("Clear Finished", fontSize = 11.sp, color = AzureOnSurface)
                             }
                         }
                     }
@@ -424,47 +440,54 @@ fun DashboardScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(24.dp)
+                    LiquidGlassCard(
+                        modifier = Modifier.padding(24.dp),
+                        cornerRadius = 24.dp
                     ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.size(72.dp)
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(24.dp)
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(SquircleShape(16.dp))
+                                    .background(AzurePrimary.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 Icon(
                                     imageVector = if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) Icons.Default.SearchOff else Icons.Default.FileDownload,
                                     contentDescription = null,
-                                    modifier = Modifier.size(36.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    modifier = Modifier.size(32.dp),
+                                    tint = AzurePrimary
                                 )
                             }
-                        }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text(
-                            text = if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) "No downloads match your filters" else "No transfers in this category",
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) "Try adjusting your query or category selection" else "Tap + to start a multi-connection download",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            OutlinedButton(
-                                onClick = {
-                                    searchQuery = ""
-                                    selectedCategory = FileCategory.ALL
-                                    selectedTab = FilterTab.ALL
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text(
+                                text = if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) "No downloads match your filters" else "No transfers in this category",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = AzureOnSurface
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) "Try adjusting your query or category selection" else "Tap + to start a multi-connection download",
+                                fontSize = 12.sp,
+                                color = AzureOnSurfaceVariant
+                            )
+                            if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) {
+                                Spacer(modifier = Modifier.height(12.dp))
+                                LiquidGlassButton(
+                                    onClick = {
+                                        searchQuery = ""
+                                        selectedCategory = FileCategory.ALL
+                                        selectedTab = FilterTab.ALL
+                                    },
+                                    accentColor = AzurePrimary,
+                                    cornerRadius = 10.dp
+                                ) {
+                                    Text("Reset Filters", color = PureBlack, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 }
-                            ) {
-                                Text("Reset Filters")
                             }
                         }
                     }
@@ -502,7 +525,7 @@ fun DashboardScreen(
         AlertDialog(
             onDismissRequest = { showClearCompletedDialog = false },
             icon = {
-                Icon(Icons.Default.CleaningServices, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.CleaningServices, contentDescription = null, tint = AzurePrimary)
             },
             title = { Text("Clear Completed Downloads?") },
             text = {
@@ -531,7 +554,7 @@ fun DashboardScreen(
                         onClearCompleted(deleteFilesOnDisk)
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (deleteFilesOnDisk) AzureError else MaterialTheme.colorScheme.primary
+                        containerColor = if (deleteFilesOnDisk) AzureError else AzurePrimary
                     )
                 ) {
                     Text("Clear")
@@ -574,19 +597,13 @@ fun DownloadCard(
         getFileVisuals(item.fileName, item.mimeType)
     }
 
-    Card(
+    LiquidGlassCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() },
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        border = BorderStroke(
-            1.dp,
-            if (item.status == DownloadStatus.DOWNLOADING) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-            else AzureCardBorder.copy(alpha = 0.5f)
-        )
+        cornerRadius = 20.dp,
+        isHighlighted = item.status == DownloadStatus.DOWNLOADING,
+        highlightColor = NeonCyan
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             // Header Row: File icon, name, status badge
@@ -594,19 +611,19 @@ fun DownloadCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = visuals.accentColor.copy(alpha = 0.15f),
-                    modifier = Modifier.size(40.dp)
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(SquircleShape(12.dp))
+                        .background(visuals.accentColor.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = visuals.icon,
-                            contentDescription = null,
-                            tint = visuals.accentColor,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
+                    Icon(
+                        imageVector = visuals.icon,
+                        contentDescription = null,
+                        tint = visuals.accentColor,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
 
                 Spacer(modifier = Modifier.width(12.dp))
@@ -617,7 +634,8 @@ fun DownloadCard(
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 15.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        color = AzureOnSurface
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -631,32 +649,31 @@ fun DownloadCard(
                         Text(
                             text = "• ${formatBytes(item.downloadedBytes)}" + (if (item.totalBytes > 0) " / ${formatBytes(item.totalBytes)}" else ""),
                             fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = AzureOnSurfaceVariant
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.width(6.dp))
 
-                // Status Badge
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = when (item.status) {
-                        DownloadStatus.COMPLETED -> AzureSuccess.copy(alpha = 0.15f)
-                        DownloadStatus.FAILED -> AzureError.copy(alpha = 0.15f)
-                        DownloadStatus.DOWNLOADING -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                        else -> AzureWarning.copy(alpha = 0.15f)
-                    }
+                // Status Badge in Liquid Glass Pill
+                LiquidGlassPill(
+                    tint = when (item.status) {
+                        DownloadStatus.COMPLETED -> AzureSuccess
+                        DownloadStatus.FAILED -> AzureError
+                        DownloadStatus.DOWNLOADING -> NeonCyan
+                        else -> AzureWarning
+                    },
+                    cornerRadius = 6.dp
                 ) {
                     Text(
                         text = item.status.name,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = when (item.status) {
                             DownloadStatus.COMPLETED -> AzureSuccess
                             DownloadStatus.FAILED -> AzureError
-                            DownloadStatus.DOWNLOADING -> MaterialTheme.colorScheme.primary
+                            DownloadStatus.DOWNLOADING -> NeonCyan
                             else -> AzureWarning
                         }
                     )
@@ -671,13 +688,13 @@ fun DownloadCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
+                    .clip(SquircleShape(3.dp)),
                 color = when (item.status) {
                     DownloadStatus.COMPLETED -> AzureSuccess
                     DownloadStatus.FAILED -> AzureError
-                    else -> MaterialTheme.colorScheme.primary
+                    else -> NeonCyan
                 },
-                trackColor = MaterialTheme.colorScheme.surface
+                trackColor = Color(0x20FFFFFF)
             )
 
             // Sparkline for actively downloading files
@@ -688,9 +705,51 @@ fun DownloadCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(26.dp),
-                    lineColor = MaterialTheme.colorScheme.primary,
-                    fillColor = MaterialTheme.colorScheme.primary
+                    lineColor = NeonCyan,
+                    fillColor = AzurePrimary
                 )
+            }
+
+            // Inline Error Diagnostics for Failed Downloads
+            if (item.status == DownloadStatus.FAILED && !item.errorMessage.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                val classified = remember(item.errorMessage) {
+                    ErrorClassifier.parseOrClassify(item.errorMessage)
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(SquircleShape(10.dp))
+                        .background(AzureError.copy(alpha = 0.12f))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = AzureError,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "${classified.title}: ${classified.userMessage}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = AzureError,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = classified.recoveryGuidance,
+                                fontSize = 10.sp,
+                                color = AzureOnSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -703,34 +762,29 @@ fun DownloadCard(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (item.isParallelTransfer) {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        LiquidGlassPill(
+                            tint = NeonCyan,
+                            cornerRadius = 6.dp
                         ) {
                             Text(
                                 text = "${item.effectiveConnectionCount()}x Parallel",
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.primary,
+                                fontSize = 10.sp,
+                                color = NeonCyan,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
                     } else {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = MaterialTheme.colorScheme.surface
-                        ) {
-                            val singleStreamLabel = if (!item.supportsRanges && item.concurrency > 1 &&
-                                item.status != DownloadStatus.QUEUED && item.status != DownloadStatus.DETECTING) {
-                                "Single Stream (No Ranges)"
-                            } else {
-                                "Single Stream"
-                            }
+                        val singleStreamLabel = if (!item.supportsRanges && item.concurrency > 1 &&
+                            item.status != DownloadStatus.QUEUED && item.status != DownloadStatus.DETECTING) {
+                            "Single Stream (No Ranges)"
+                        } else {
+                            "Single Stream"
+                        }
+                        LiquidGlassPill(cornerRadius = 6.dp) {
                             Text(
                                 text = singleStreamLabel,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                 fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = AzureOnSurfaceVariant
                             )
                         }
                     }
@@ -741,7 +795,7 @@ fun DownloadCard(
                             text = formatSpeed(speed),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary
+                            color = NeonCyan
                         )
                     }
 
@@ -751,7 +805,7 @@ fun DownloadCard(
                             text = "${(progress * 100).toInt()}%",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = AzureOnSurfaceVariant
                         )
                     }
                 }
@@ -766,20 +820,20 @@ fun DownloadCard(
                         }
                         DownloadStatus.PAUSED -> {
                             IconButton(onClick = onResume) {
-                                Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = MaterialTheme.colorScheme.primary)
+                                Icon(Icons.Default.PlayArrow, contentDescription = "Resume", tint = AzurePrimary)
                             }
                         }
                         DownloadStatus.FAILED -> {
                             IconButton(onClick = onRetry) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = MaterialTheme.colorScheme.primary)
+                                Icon(Icons.Default.Refresh, contentDescription = "Retry", tint = AzurePrimary)
                             }
                         }
                         DownloadStatus.COMPLETED -> {
                             IconButton(onClick = onShareFile) {
-                                Icon(Icons.Default.Share, contentDescription = "Share", tint = MaterialTheme.colorScheme.primary)
+                                Icon(Icons.Default.Share, contentDescription = "Share", tint = AzurePrimary)
                             }
                             IconButton(onClick = onOpenFile) {
-                                Icon(Icons.Default.OpenInNew, contentDescription = "Open file", tint = MaterialTheme.colorScheme.primary)
+                                Icon(Icons.Default.OpenInNew, contentDescription = "Open file", tint = AzurePrimary)
                             }
                         }
                         else -> {}

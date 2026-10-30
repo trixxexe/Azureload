@@ -8,9 +8,12 @@ import com.ritam.azureload.core.model.DownloadItem
 import com.ritam.azureload.core.model.DownloadStatus
 import com.ritam.azureload.core.model.ServerCapability
 import com.ritam.azureload.core.network.CapabilityDetector
+import com.ritam.azureload.core.network.ErrorClassifier
 import com.ritam.azureload.core.network.FatalDownloadException
 import com.ritam.azureload.core.network.HttpClientProvider
+import com.ritam.azureload.core.network.IntegrityVerificationException
 import com.ritam.azureload.core.network.RangeNotSupportedException
+import com.ritam.azureload.core.network.StorageFullException
 import com.ritam.azureload.core.network.TransientDownloadException
 import com.ritam.azureload.core.settings.SettingsManager
 import com.ritam.azureload.core.storage.IntegrityVerifier
@@ -131,6 +134,11 @@ class DownloadJobRunner(
             currentDownloadRef = currentDownload
 
             // Step 4: Execute transfer (Parallel chunk or single stream with fallback)
+            val remainingToDownload = if (totalBytes > 0) (totalBytes - stagingFile.length()).coerceAtLeast(0L) else 0L
+            if (remainingToDownload > 0 && !stagingFileManager.checkFreeSpace(remainingToDownload)) {
+                throw StorageFullException("Insufficient storage space: requires $remainingToDownload bytes")
+            }
+
             if (supportsRange && totalBytes >= ChunkScheduler.MIN_CHUNK_SIZE && currentDownload.concurrency > 1) {
                 stagingFileManager.allocateStagingFile(stagingFile, totalBytes)
                 try {
@@ -159,7 +167,7 @@ class DownloadJobRunner(
             if (!currentDownload.expectedSha256.isNullOrBlank()) {
                 val matches = IntegrityVerifier.verifySha256(stagingFile, currentDownload.expectedSha256)
                 if (!matches) {
-                    throw IllegalStateException("Integrity check failed: SHA-256 checksum mismatch")
+                    throw IntegrityVerificationException("Integrity check failed: SHA-256 checksum mismatch")
                 }
             }
 
@@ -182,7 +190,8 @@ class DownloadJobRunner(
             throw ce
         } catch (e: Exception) {
             Log.e(tag, "Download $downloadId failed", e)
-            val msg = e.message ?: "Download error"
+            val classified = ErrorClassifier.classify(e)
+            val msg = classified.toDisplayString()
             repository.updateDownloadStatus(downloadId, DownloadStatus.FAILED, msg)
         }
     }

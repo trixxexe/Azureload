@@ -1,25 +1,26 @@
 package com.ritam.azureload.feature.settings
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ritam.azureload.core.settings.SettingsManager
 import com.ritam.azureload.feature.dashboard.formatSpeed
-import com.ritam.azureload.ui.theme.AzureCardBorder
+import com.ritam.azureload.ui.components.LiquidGlassCard
+import com.ritam.azureload.ui.components.LiquidGlassPill
+import com.ritam.azureload.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,12 +28,13 @@ fun SettingsScreen(
     settingsManager: SettingsManager,
     onBack: () -> Unit
 ) {
-    val wifiOnly by settingsManager.wifiOnlyFlow.collectAsState()
-    val defaultConcurrency by settingsManager.defaultConcurrencyFlow.collectAsState()
-    val maxActiveTransfers by settingsManager.maxActiveTransfersFlow.collectAsState()
-    val globalSpeedLimit by settingsManager.globalSpeedLimitFlow.collectAsState()
+    val wifiOnly by settingsManager.wifiOnlyFlow.collectAsStateWithLifecycle()
+    val defaultConcurrency by settingsManager.defaultConcurrencyFlow.collectAsStateWithLifecycle()
+    val maxActiveTransfers by settingsManager.maxActiveTransfersFlow.collectAsStateWithLifecycle()
+    val globalSpeedLimit by settingsManager.globalSpeedLimitFlow.collectAsStateWithLifecycle()
 
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text("Settings", fontWeight = FontWeight.Bold) },
@@ -42,7 +44,9 @@ fun SettingsScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+                    containerColor = Color.Transparent,
+                    titleContentColor = AzureOnSurface,
+                    navigationIconContentColor = AzureOnSurface
                 )
             )
         }
@@ -59,61 +63,75 @@ fun SettingsScreen(
             Text(
                 text = "Network & Concurrency",
                 fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.primary
+                fontSize = 13.sp,
+                color = AzurePrimary,
+                letterSpacing = 0.5.sp
             )
 
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, AzureCardBorder.copy(alpha = 0.5f))
+            LiquidGlassCard(
+                cornerRadius = 20.dp
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Only download over Wi-Fi", fontWeight = FontWeight.SemiBold)
-                            Text("Prevent transfers on cellular data", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Only download over Wi-Fi", fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
+                            Text("Prevent transfers on cellular data", fontSize = 12.sp, color = AzureOnSurfaceVariant)
                         }
-                        Switch(checked = wifiOnly, onCheckedChange = { settingsManager.setWifiOnly(it) })
+                        Switch(
+                            checked = wifiOnly,
+                            onCheckedChange = { settingsManager.setWifiOnly(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = PureBlack,
+                                checkedTrackColor = AzurePrimary
+                            )
+                        )
                     }
 
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp), color = Color(0x18FFFFFF))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Default Concurrency", fontWeight = FontWeight.SemiBold)
-                        Text("$defaultConcurrency Threads", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("Default Concurrency", fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
+                        Text("$defaultConcurrency Threads", fontWeight = FontWeight.Bold, color = NeonCyan)
                     }
                     Slider(
                         value = defaultConcurrency.toFloat(),
                         onValueChange = { settingsManager.setDefaultConcurrency(it.toInt()) },
                         valueRange = 1f..16f,
-                        steps = 14
+                        steps = 14,
+                        colors = SliderDefaults.colors(
+                            thumbColor = NeonCyan,
+                            activeTrackColor = AzurePrimary
+                        )
                     )
-                    Text("Multi-connection range threads allocated per new download.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Multi-connection range threads allocated per new download.", fontSize = 11.sp, color = AzureOnSurfaceVariant)
 
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp), color = Color(0x18FFFFFF))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Max Concurrent Active Transfers", fontWeight = FontWeight.SemiBold)
-                        Text("$maxActiveTransfers Active", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                        Text("Max Concurrent Active Transfers", fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
+                        Text("$maxActiveTransfers Active", fontWeight = FontWeight.Bold, color = NeonCyan)
                     }
                     Slider(
                         value = maxActiveTransfers.toFloat(),
                         onValueChange = { settingsManager.setMaxActiveTransfers(it.toInt()) },
                         valueRange = 1f..6f,
-                        steps = 4
+                        steps = 4,
+                        colors = SliderDefaults.colors(
+                            thumbColor = NeonCyan,
+                            activeTrackColor = AzurePrimary
+                        )
                     )
-                    Text("Maximum transfers running concurrently. Additional downloads wait in QUEUED state.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Maximum transfers running concurrently. Additional downloads wait in QUEUED state.", fontSize = 11.sp, color = AzureOnSurfaceVariant)
                 }
             }
 
@@ -121,33 +139,32 @@ fun SettingsScreen(
             Text(
                 text = "Bandwidth & Speed Limits",
                 fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.primary
+                fontSize = 13.sp,
+                color = AzurePrimary,
+                letterSpacing = 0.5.sp
             )
 
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, AzureCardBorder.copy(alpha = 0.5f))
+            LiquidGlassCard(
+                cornerRadius = 20.dp
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Speed, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Speed, contentDescription = null, tint = AzurePrimary, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Global Download Speed Limit", fontWeight = FontWeight.SemiBold)
+                            Text("Global Download Speed Limit", fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
                         }
                         Text(
                             text = if (globalSpeedLimit > 0) formatSpeed(globalSpeedLimit) else "Unlimited",
                             fontWeight = FontWeight.Bold,
-                            color = if (globalSpeedLimit > 0) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+                            color = if (globalSpeedLimit > 0) AzureSecondary else AzurePrimary
                         )
                     }
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
                         modifier = Modifier
@@ -164,19 +181,26 @@ fun SettingsScreen(
                             "25 MB/s" to 25L * 1024L * 1024L
                         )
                         limits.forEach { (label, bytes) ->
-                            FilterChip(
-                                selected = globalSpeedLimit == bytes,
-                                onClick = { settingsManager.setGlobalSpeedLimit(bytes) },
-                                label = { Text(label, fontSize = 11.sp) },
-                                shape = RoundedCornerShape(8.dp)
-                            )
+                            val isSelected = globalSpeedLimit == bytes
+                            LiquidGlassPill(
+                                tint = if (isSelected) AzurePrimary else null,
+                                cornerRadius = 12.dp,
+                                onClick = { settingsManager.setGlobalSpeedLimit(bytes) }
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) PureBlack else AzureOnSurface
+                                )
+                            }
                         }
                     }
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = "Applies across all active transfers simultaneously to preserve Wi-Fi/cellular bandwidth.",
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = AzureOnSurfaceVariant
                     )
                 }
             }
@@ -185,26 +209,26 @@ fun SettingsScreen(
             Text(
                 text = "About Azureload",
                 fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.primary
+                fontSize = 13.sp,
+                color = AzurePrimary,
+                letterSpacing = 0.5.sp
             )
 
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                border = BorderStroke(1.dp, AzureCardBorder.copy(alpha = 0.5f))
+            LiquidGlassCard(
+                cornerRadius = 20.dp
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Azureload (BOLT Mobile)", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Text("Azureload Liquid Glass", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = AzureOnSurface)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("Version 1.0.0 (Build 1) • Production Release", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Version 1.0.0 (Build 1) • Production Release", fontSize = 12.sp, color = AzureOnSurfaceVariant)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "A desktop-grade multi-connection download accelerator and native manager for Android.",
-                        fontSize = 13.sp
+                        "Desktop-grade multi-connection accelerator featuring G2 continuous-curvature Liquid Glass UI, structured error recovery, and strict mobile lifecycle management.",
+                        fontSize = 13.sp,
+                        color = AzureOnSurface
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("Package: com.ritam.azureload", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Package: com.ritam.azureload", fontSize = 11.sp, color = AzureOnSurfaceVariant)
                 }
             }
         }

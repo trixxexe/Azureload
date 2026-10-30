@@ -16,13 +16,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -92,16 +97,25 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    Color(0xFF060913),
+                                    Color(0xFF0C1428),
+                                    Color(0xFF080D1A)
+                                )
+                            )
+                        )
                 ) {
                     val navController = rememberNavController()
-                    val downloads by repository.getAllDownloads().collectAsState(initial = emptyList())
-                    val speeds by coordinator.speeds.collectAsState()
-                    val speedHistories by coordinator.speedHistory.collectAsState()
-                    val totalSpeedHistory by coordinator.totalSpeedHistory.collectAsState()
-                    val defaultConcurrency by settingsManager.defaultConcurrencyFlow.collectAsState()
+                    val downloads by repository.getAllDownloads().collectAsStateWithLifecycle(initialValue = emptyList())
+                    val speeds by coordinator.speeds.collectAsStateWithLifecycle()
+                    val speedHistories by coordinator.speedHistory.collectAsStateWithLifecycle()
+                    val totalSpeedHistory by coordinator.totalSpeedHistory.collectAsStateWithLifecycle()
+                    val defaultConcurrency by settingsManager.defaultConcurrencyFlow.collectAsStateWithLifecycle()
                     val coroutineScope = rememberCoroutineScope()
                     val sharedUrl by sharedUrlState
 
@@ -221,7 +235,7 @@ class MainActivity : ComponentActivity() {
                         ) { backStackEntry ->
                             val id = backStackEntry.arguments?.getLong("id") ?: -1L
                             val download = downloads.firstOrNull { it.id == id }
-                            val chunks by repository.observeChunksForDownload(id).collectAsState(initial = emptyList())
+                            val chunks by repository.observeChunksForDownload(id).collectAsStateWithLifecycle(initialValue = emptyList())
                             val currentSpeed = speeds[id] ?: 0L
 
                             DetailScreen(
@@ -274,6 +288,8 @@ class MainActivity : ComponentActivity() {
         networkCallback?.let {
             try { connectivityManager?.unregisterNetworkCallback(it) } catch (_: Exception) {}
         }
+        networkCallback = null
+        connectivityManager = null
     }
 
     private fun extractUrlFromIntent(intent: Intent?): String? {
