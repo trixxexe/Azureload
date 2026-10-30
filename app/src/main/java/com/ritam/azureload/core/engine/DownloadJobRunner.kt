@@ -108,7 +108,7 @@ class DownloadJobRunner(
             repository.updateDownload(currentDownload)
 
             // Step 4: Execute transfer (Parallel chunk or single stream with fallback)
-            if (supportsRange && totalBytes > 0 && currentDownload.concurrency > 1) {
+            if (supportsRange && totalBytes >= ChunkScheduler.MIN_CHUNK_SIZE && currentDownload.concurrency > 1) {
                 stagingFileManager.allocateStagingFile(stagingFile, totalBytes)
                 try {
                     executeMultiRangeDownload(currentDownload, stagingFile, totalBytes)
@@ -338,7 +338,7 @@ class DownloadJobRunner(
                     repository.updateChunkProgress(
                         chunk.id,
                         totalChunkDownloaded,
-                        if (totalChunkDownloaded >= expectedChunkSize) ChunkStatus.COMPLETED else ChunkStatus.DOWNLOADING
+                        if (totalChunkDownloaded >= expectedChunkSize) ChunkStatus.COMPLETED else ChunkStatus.PENDING
                     )
                     updateGlobalProgress(totalBytes)
                 }

@@ -50,7 +50,6 @@ class RangeRequestHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/octet-stream")
             self.send_header("Content-Length", str(len(PAYLOAD)))
-            self.send_header("Accept-Ranges", "none")
             self.send_header("ETag", PAYLOAD_ETAG)
             self.end_headers()
             return
@@ -106,7 +105,6 @@ class RangeRequestHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/octet-stream")
             self.send_header("Content-Length", str(len(PAYLOAD)))
-            self.send_header("Accept-Ranges", "none")
             self.send_header("Content-Disposition", 'attachment; filename="no-range.bin"')
             self.end_headers()
             self._stream_bytes(PAYLOAD, rate_limit_kbps)

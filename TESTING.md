@@ -28,6 +28,8 @@ Azureload relies on deterministic, reproducible automated tests. Core transfer l
 | **Unsupported Range / HEXAQA Simulation** | Verify that servers returning HTTP 200 to Range requests are detected as non-range, force single stream, clear chunks, and report Single Stream / 1 connection without misleading concurrency. | `MockWebServer` + `DownloadEngineIntegrationTest` |
 | **Pause & Resume File Reconstruction** | Verify that pausing midway and resuming incomplete chunks reconstructs the exact original file without data loss. | `MockWebServer` + `DownloadEngineIntegrationTest` |
 | **Process-Death Recovery from Staging** | Verify that abrupt process kill marks transfers PAUSED and recovers cleanly from partial staging data without re-fetching completed chunks. | `MockWebServer` + `DownloadEngineIntegrationTest` |
+| **Sub-1MB Range Support Single Stream** | Verify that files < 1MB with range support do not allocate multiple chunks, execute cleanly as single-stream, and report 1 connection. | `MockWebServer` + `DownloadEngineIntegrationTest` |
+| **Effective Connection Calculation** | Verify mathematical bounds on parallel transfers across unknown sizes (-1L), clamped concurrency, and server capabilities. | Unit test + `ChunkSchedulerTest` |
 
 ---
 

@@ -53,14 +53,19 @@ data class DownloadItem(
     val currentSpeedBytesPerSec: Long = 0L
 ) {
     val isParallelTransfer: Boolean
-        get() = supportsRanges && concurrency > 1 && (totalBytes <= 0 || totalBytes >= 1024 * 1024L)
+        get() = supportsRanges && concurrency > 1 && totalBytes >= 1024 * 1024L
 
     val transferModeTitle: String
         get() = if (isParallelTransfer) "Multi-Connection Parallel" else "Single Stream"
 
     fun effectiveConnectionCount(chunks: List<ChunkItem> = emptyList()): Int {
         if (!isParallelTransfer) return 1
-        return if (chunks.isNotEmpty()) chunks.size else concurrency
+        if (chunks.isNotEmpty()) return chunks.size
+        if (totalBytes >= 1024 * 1024L) {
+            val maxChunks = (totalBytes / (1024 * 1024L)).toInt().coerceAtLeast(1)
+            return concurrency.coerceIn(1, 16).coerceAtMost(maxChunks)
+        }
+        return 1
     }
 }
 

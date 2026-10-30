@@ -286,7 +286,7 @@ fun DownloadCard(
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
                         ) {
                             Text(
-                                text = "${item.concurrency}x Parallel",
+                                text = "${item.effectiveConnectionCount()}x Parallel",
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.primary,
@@ -298,8 +298,13 @@ fun DownloadCard(
                             shape = RoundedCornerShape(4.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant
                         ) {
+                            val singleStreamLabel = if (!item.supportsRanges && item.concurrency > 1 && item.status != DownloadStatus.QUEUED && item.status != DownloadStatus.DETECTING) {
+                                "Single Stream (No Ranges)"
+                            } else {
+                                "Single Stream"
+                            }
                             Text(
-                                text = if (!item.supportsRanges && item.concurrency > 1) "Single Stream (No Ranges)" else "Single Stream",
+                                text = singleStreamLabel,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -85,16 +85,16 @@ fun DetailScreen(
 
         val isParallel = download.isParallelTransfer
         val connectionValue = if (!isParallel) {
-            "1 Stream"
+            if (download.status == DownloadStatus.DOWNLOADING) "1 Active Stream" else "1 Stream"
         } else if (chunks.isNotEmpty()) {
             if (download.status == DownloadStatus.DOWNLOADING) {
                 val activeCount = chunks.count { it.status == ChunkStatus.DOWNLOADING }
                 if (activeCount > 0) "$activeCount / ${chunks.size} Active" else "${chunks.size} Connections"
             } else {
-                "${chunks.size} Chunks"
+                "${chunks.size} Connections"
             }
         } else {
-            "${download.concurrency} Chunks"
+            "${download.effectiveConnectionCount()} Connections"
         }
 
         LazyColumn(
@@ -131,14 +131,14 @@ fun DetailScreen(
                                 color = if (isParallel) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface
                             ) {
                                 Text(
-                                    text = if (isParallel) "${chunks.size.takeIf { it > 0 } ?: download.concurrency}x Parallel" else "Single Stream",
+                                    text = if (isParallel) "${download.effectiveConnectionCount(chunks)}x Parallel" else "Single Stream",
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = if (isParallel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                            if (!download.supportsRanges && download.concurrency > 1) {
+                            if (!download.supportsRanges && download.concurrency > 1 && download.status != DownloadStatus.QUEUED && download.status != DownloadStatus.DETECTING) {
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = "(Byte ranges unsupported by server)",
@@ -295,17 +295,20 @@ fun DetailScreen(
                         MetadataRow(
                             "Active Connections",
                             if (isParallel) {
-                                if (chunks.isNotEmpty()) {
+                                val totalConnections = download.effectiveConnectionCount(chunks)
+                                if (download.status == DownloadStatus.DOWNLOADING) {
                                     val active = chunks.count { it.status == ChunkStatus.DOWNLOADING }
-                                    "$active active / ${chunks.size} total"
-                                } else "${download.concurrency} parallel connections"
+                                    "$active active / $totalConnections total"
+                                } else {
+                                    "0 active / $totalConnections total"
+                                }
                             } else {
-                                if (download.status == DownloadStatus.DOWNLOADING) "1 active stream" else "1 stream"
+                                if (download.status == DownloadStatus.DOWNLOADING) "1 active stream" else "0 active streams"
                             }
                         )
                         MetadataRow("Configured Concurrency", "${download.concurrency} streams requested")
                         MetadataRow("Byte Ranges Supported", if (download.supportsRanges) "Yes" else "No")
-                        if (!download.supportsRanges && download.concurrency > 1) {
+                        if (!download.supportsRanges && download.concurrency > 1 && download.status != DownloadStatus.QUEUED && download.status != DownloadStatus.DETECTING) {
                             MetadataRow(
                                 "Acceleration Fallback",
                                 "Server does not support HTTP byte ranges (HTTP 206). Engine runs safely in single-stream mode."
