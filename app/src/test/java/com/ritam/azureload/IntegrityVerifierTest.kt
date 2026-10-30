@@ -36,4 +36,30 @@ class IntegrityVerifierTest {
         assertTrue(IntegrityVerifier.verifySize(testFile, 1024))
         assertFalse(IntegrityVerifier.verifySize(testFile, 2048))
     }
+
+    @Test
+    fun testComputeAndVerifyMd5() {
+        val testFile = tempFolder.newFile("md5_test.txt")
+        testFile.writeText("Azureload Multi-Connection Accelerator")
+
+        val md5 = IntegrityVerifier.computeMd5(testFile)
+        assertTrue(md5.isNotEmpty())
+        assertEquals(32, md5.length)
+
+        assertTrue(IntegrityVerifier.verifyMd5(testFile, md5))
+        assertFalse(IntegrityVerifier.verifyMd5(testFile, "d41d8cd98f00b204e9800998ecf8427e"))
+    }
+
+    @Test
+    fun testDualComputeChecksums() = kotlinx.coroutines.runBlocking {
+        val testFile = tempFolder.newFile("dual_test.txt")
+        testFile.writeText("Checksum verification payload")
+
+        val res = IntegrityVerifier.computeChecksums(testFile)
+        assertEquals(64, res.sha256.length)
+        assertEquals(32, res.md5.length)
+
+        assertEquals(IntegrityVerifier.computeSha256(testFile), res.sha256)
+        assertEquals(IntegrityVerifier.computeMd5(testFile), res.md5)
+    }
 }

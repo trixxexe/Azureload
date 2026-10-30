@@ -58,6 +58,37 @@ class FakeDownloadDao : DownloadDao {
         emitUpdate()
     }
 
+    override suspend fun updateSpeedLimit(id: Long, speedLimit: Long, updatedAt: Long) {
+        val existing = storage[id] ?: return
+        storage[id] = existing.copy(speedLimitBytesPerSec = speedLimit, updatedAt = updatedAt)
+        emitUpdate()
+    }
+
+    override suspend fun getCompletedDownloads(): List<DownloadEntity> {
+        return storage.values.filter { it.status == "COMPLETED" }
+    }
+
+    override suspend fun deleteCompleted(): Int {
+        val toRemove = storage.values.filter { it.status == "COMPLETED" }.map { it.id }
+        for (id in toRemove) {
+            storage.remove(id)
+        }
+        emitUpdate()
+        return toRemove.size
+    }
+
+    override suspend fun resumeAllPausedOrFailed(updatedAt: Long): Int {
+        var count = 0
+        for ((id, item) in storage) {
+            if (item.status == "PAUSED" || item.status == "FAILED") {
+                storage[id] = item.copy(status = "QUEUED", errorMessage = null, updatedAt = updatedAt)
+                count++
+            }
+        }
+        if (count > 0) emitUpdate()
+        return count
+    }
+
     override suspend fun deleteById(id: Long) {
         storage.remove(id)
         emitUpdate()

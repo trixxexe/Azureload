@@ -3,6 +3,8 @@ package com.ritam.azureload.feature.add
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +23,8 @@ import com.ritam.azureload.core.model.ServerCapability
 import com.ritam.azureload.core.network.CapabilityDetector
 import com.ritam.azureload.core.storage.FileNameSanitizer
 import com.ritam.azureload.feature.dashboard.formatBytes
+import com.ritam.azureload.feature.dashboard.formatSpeed
+import com.ritam.azureload.ui.theme.AzureCardBorder
 import com.ritam.azureload.ui.theme.AzureError
 import com.ritam.azureload.ui.theme.AzureSuccess
 import kotlinx.coroutines.launch
@@ -34,7 +38,7 @@ fun AddDownloadScreen(
     initialFileName: String? = null,
     defaultConcurrency: Int = 4,
     onBack: () -> Unit,
-    onSubmitDownload: (url: String, fileName: String, concurrency: Int, headers: Map<String, String>, sha256: String?) -> Unit
+    onSubmitDownload: (url: String, fileName: String, concurrency: Int, headers: Map<String, String>, sha256: String?, speedLimit: Long) -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -52,6 +56,7 @@ fun AddDownloadScreen(
     var concurrency by remember(defaultConcurrency) { mutableStateOf(defaultConcurrency.coerceIn(1, 16).toFloat()) }
     var customHeadersText by remember(prefilledHeaders) { mutableStateOf(prefilledHeaders) }
     var expectedSha256 by remember { mutableStateOf("") }
+    var speedLimitBytes by remember { mutableStateOf(0L) }
 
     var isInspecting by remember { mutableStateOf(false) }
     var capabilityResult by remember { mutableStateOf<ServerCapability?>(null) }
@@ -108,10 +113,11 @@ fun AddDownloadScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // URL Input Card
+            // Source URL Card
             Card(
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = BorderStroke(1.dp, AzureCardBorder.copy(alpha = 0.5f))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
@@ -140,7 +146,7 @@ fun AddDownloadScreen(
                         },
                         singleLine = true
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
                     Button(
                         onClick = { inspectUrl() },
                         modifier = Modifier.fillMaxWidth(),
@@ -166,7 +172,8 @@ fun AddDownloadScreen(
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = if (inspectionError != null) AzureError.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surfaceVariant
-                    )
+                    ),
+                    border = BorderStroke(1.dp, if (inspectionError != null) AzureError.copy(alpha = 0.4f) else AzureSuccess.copy(alpha = 0.4f))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         if (inspectionError != null) {
@@ -216,13 +223,15 @@ fun AddDownloadScreen(
                 onValueChange = { fileName = it },
                 label = { Text("Target File Name") },
                 modifier = Modifier.fillMaxWidth(),
-                singleLine = true
+                singleLine = true,
+                shape = RoundedCornerShape(10.dp)
             )
 
             // Concurrency Slider
             Card(
                 shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = BorderStroke(1.dp, AzureCardBorder.copy(alpha = 0.5f))
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -246,6 +255,51 @@ fun AddDownloadScreen(
                 }
             }
 
+            // Speed Throttle Option Card
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                border = BorderStroke(1.dp, AzureCardBorder.copy(alpha = 0.5f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Download Speed Throttle", fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = if (speedLimitBytes > 0) formatSpeed(speedLimitBytes) else "Unlimited",
+                            fontWeight = FontWeight.Bold,
+                            color = if (speedLimitBytes > 0) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        val presets = listOf(
+                            "Unlimited" to 0L,
+                            "512 KB/s" to 512L * 1024L,
+                            "1 MB/s" to 1L * 1024L * 1024L,
+                            "2 MB/s" to 2L * 1024L * 1024L,
+                            "5 MB/s" to 5L * 1024L * 1024L
+                        )
+                        presets.forEach { (label, bytes) ->
+                            FilterChip(
+                                selected = speedLimitBytes == bytes,
+                                onClick = { speedLimitBytes = bytes },
+                                label = { Text(label, fontSize = 11.sp) },
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             // Advanced: Custom Headers
             OutlinedTextField(
                 value = customHeadersText,
@@ -254,7 +308,8 @@ fun AddDownloadScreen(
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("Authorization: Bearer xyz\nCookie: session=123") },
                 minLines = 2,
-                maxLines = 4
+                maxLines = 4,
+                shape = RoundedCornerShape(10.dp)
             )
 
             // Advanced: Expected SHA-256
@@ -264,7 +319,8 @@ fun AddDownloadScreen(
                 label = { Text("Expected SHA-256 Checksum (Optional)") },
                 modifier = Modifier.fillMaxWidth(),
                 placeholder = { Text("e.g. e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") },
-                singleLine = true
+                singleLine = true,
+                shape = RoundedCornerShape(10.dp)
             )
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -280,7 +336,7 @@ fun AddDownloadScreen(
                     }
                     val headers = parseHeaders(customHeadersText)
                     val sha = expectedSha256.trim().ifBlank { null }
-                    onSubmitDownload(url, finalName, concurrency.toInt(), headers, sha)
+                    onSubmitDownload(url, finalName, concurrency.toInt(), headers, sha, speedLimitBytes)
                     onBack()
                 },
                 modifier = Modifier

@@ -98,6 +98,8 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     val downloads by repository.getAllDownloads().collectAsState(initial = emptyList())
                     val speeds by coordinator.speeds.collectAsState()
+                    val speedHistories by coordinator.speedHistory.collectAsState()
+                    val totalSpeedHistory by coordinator.totalSpeedHistory.collectAsState()
                     val defaultConcurrency by settingsManager.defaultConcurrencyFlow.collectAsState()
                     val coroutineScope = rememberCoroutineScope()
                     val sharedUrl by sharedUrlState
@@ -119,6 +121,8 @@ class MainActivity : ComponentActivity() {
                             DashboardScreen(
                                 downloads = downloads,
                                 speeds = speeds,
+                                speedHistories = speedHistories,
+                                totalSpeedHistory = totalSpeedHistory,
                                 onNavigateToAdd = { navController.navigate(Screen.Add.createRoute()) },
                                 onNavigateToBrowser = { navController.navigate(Screen.Browser.createRoute()) },
                                 onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
@@ -129,7 +133,11 @@ class MainActivity : ComponentActivity() {
                                 onRetry = { coordinator.retryDownload(it) },
                                 onCancel = { coordinator.cancelDownload(it) },
                                 onDelete = { coordinator.cancelDownload(it) },
-                                onOpenFile = { openDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) }
+                                onPauseAll = { coordinator.pauseAll() },
+                                onResumeAll = { coordinator.resumeAll() },
+                                onClearCompleted = { deleteFiles -> coordinator.clearCompleted(deleteFiles) },
+                                onOpenFile = { openDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) },
+                                onShareFile = { shareDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) }
                             )
                         }
 
@@ -158,7 +166,7 @@ class MainActivity : ComponentActivity() {
                                 initialFileName = initialFileName,
                                 defaultConcurrency = defaultConcurrency,
                                 onBack = { navController.popBackStack() },
-                                onSubmitDownload = { url, fileName, concurrency, headers, sha256 ->
+                                onSubmitDownload = { url, fileName, concurrency, headers, sha256, speedLimit ->
                                     coroutineScope.launch {
                                         val newDownload = DownloadItem(
                                             url = url,
@@ -168,6 +176,7 @@ class MainActivity : ComponentActivity() {
                                             expectedSha256 = sha256,
                                             destinationPath = "",
                                             stagingPath = "",
+                                            speedLimitBytesPerSec = speedLimit,
                                             status = DownloadStatus.QUEUED
                                         )
                                         val id = repository.insertDownload(newDownload)
@@ -218,12 +227,15 @@ class MainActivity : ComponentActivity() {
                                 download = download,
                                 chunks = chunks,
                                 speed = currentSpeed,
+                                speedHistory = speedHistories[id] ?: emptyList(),
                                 onBack = { navController.popBackStack() },
                                 onPause = { coordinator.pauseDownload(it) },
                                 onResume = { coordinator.resumeDownload(it) },
                                 onRetry = { coordinator.retryDownload(it) },
                                 onCancel = { coordinator.cancelDownload(it) },
-                                onOpenFile = { openDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) }
+                                onOpenFile = { openDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) },
+                                onShareFile = { shareDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) },
+                                onUpdateSpeedLimit = { dlId, limit -> coordinator.updateSpeedLimit(dlId, limit) }
                             )
                         }
 
@@ -302,6 +314,33 @@ class MainActivity : ComponentActivity() {
             context.startActivity(intent)
         } catch (e: Exception) {
             Toast.makeText(context, "Cannot open file: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun shareDownloadedFile(context: Context, filePath: String, mimeType: String?) {
+        val file = File(filePath)
+        if (!file.exists()) {
+            Toast.makeText(context, "File not found: $filePath", Toast.LENGTH_SHORT).show()
+            return
+        }
+        try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            val type = mimeType ?: getMimeType(file)
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                putExtra(Intent.EXTRA_STREAM, uri)
+                setDataAndType(uri, type)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = Intent.createChooser(shareIntent, "Share ${file.name}").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Cannot share file: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 

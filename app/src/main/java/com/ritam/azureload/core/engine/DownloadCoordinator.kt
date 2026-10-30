@@ -34,6 +34,12 @@ class DownloadCoordinator(
     private val _speeds = MutableStateFlow<Map<Long, Long>>(emptyMap())
     val speeds: StateFlow<Map<Long, Long>> = _speeds.asStateFlow()
 
+    private val _speedHistory = MutableStateFlow<Map<Long, List<Long>>>(emptyMap())
+    val speedHistory: StateFlow<Map<Long, List<Long>>> = _speedHistory.asStateFlow()
+
+    private val _totalSpeedHistory = MutableStateFlow<List<Long>>(emptyList())
+    val totalSpeedHistory: StateFlow<List<Long>> = _totalSpeedHistory.asStateFlow()
+
     init {
         scope.launch {
             recoverPendingDownloads()
@@ -109,8 +115,20 @@ class DownloadCoordinator(
                     downloadId = downloadId,
                     repository = repository,
                     stagingFileManager = stagingFileManager,
+                    settingsManager = settingsManager,
                     onProgress = { id, downloaded, total, speed ->
-                        _speeds.value = _speeds.value.toMutableMap().apply { put(id, speed) }
+                        val updatedSpeeds = _speeds.value.toMutableMap().apply { put(id, speed) }
+                        _speeds.value = updatedSpeeds
+
+                        // Record per-download speed history (keep last 30 samples)
+                        val prevHistory = _speedHistory.value[id] ?: emptyList()
+                        val nextHistory = (prevHistory + speed).takeLast(30)
+                        _speedHistory.value = _speedHistory.value.toMutableMap().apply { put(id, nextHistory) }
+
+                        // Record total aggregate speed history (keep last 30 samples)
+                        val aggregateSpeed = updatedSpeeds.values.sum()
+                        _totalSpeedHistory.value = (_totalSpeedHistory.value + aggregateSpeed).takeLast(30)
+
                         val now = System.currentTimeMillis()
                         val lastUpdate = lastServiceUpdate[id] ?: 0L
                         if (now - lastUpdate >= 750L) {
@@ -127,7 +145,10 @@ class DownloadCoordinator(
             } finally {
                 activeJobs.remove(downloadId)
                 lastServiceUpdate.remove(downloadId)
-                _speeds.value = _speeds.value.toMutableMap().apply { remove(downloadId) }
+                val updatedSpeeds = _speeds.value.toMutableMap().apply { remove(downloadId) }
+                _speeds.value = updatedSpeeds
+                val aggregateSpeed = updatedSpeeds.values.sum()
+                _totalSpeedHistory.value = (_totalSpeedHistory.value + aggregateSpeed).takeLast(30)
                 if (activeJobs.isEmpty()) {
                     DownloadForegroundService.stopService(context)
                 }
@@ -194,6 +215,38 @@ class DownloadCoordinator(
             }
             repository.deleteDownload(downloadId)
             checkNextQueuedDownload()
+        }
+    }
+
+    fun pauseAll() {
+        for ((id, job) in activeJobs) {
+            job.cancel()
+            scope.launch {
+                repository.updateDownloadStatus(id, DownloadStatus.PAUSED)
+            }
+        }
+        activeJobs.clear()
+        lastServiceUpdate.clear()
+        _speeds.value = emptyMap()
+        DownloadForegroundService.stopService(context)
+    }
+
+    fun resumeAll() {
+        scope.launch {
+            repository.resumeAllPausedOrFailed()
+            checkNextQueuedDownload()
+        }
+    }
+
+    fun clearCompleted(deleteFilesFromDisk: Boolean = false) {
+        scope.launch {
+            repository.clearCompleted(deleteFilesFromDisk)
+        }
+    }
+
+    fun updateSpeedLimit(downloadId: Long, limitBytesPerSec: Long) {
+        scope.launch {
+            repository.updateSpeedLimit(downloadId, limitBytesPerSec)
         }
     }
 

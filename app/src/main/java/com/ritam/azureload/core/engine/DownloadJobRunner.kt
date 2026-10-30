@@ -12,6 +12,7 @@ import com.ritam.azureload.core.network.FatalDownloadException
 import com.ritam.azureload.core.network.HttpClientProvider
 import com.ritam.azureload.core.network.RangeNotSupportedException
 import com.ritam.azureload.core.network.TransientDownloadException
+import com.ritam.azureload.core.settings.SettingsManager
 import com.ritam.azureload.core.storage.IntegrityVerifier
 import com.ritam.azureload.core.storage.StagingFileManager
 import kotlinx.coroutines.CancellationException
@@ -39,15 +40,30 @@ class DownloadJobRunner(
     private val stagingFileManager: StagingFileManager,
     private val capabilityDetector: CapabilityDetector = CapabilityDetector(),
     private val httpClient: OkHttpClient = HttpClientProvider.client,
+    private val settingsManager: SettingsManager? = null,
     private val onProgress: (Long, Long, Long, Long) -> Unit = { _, _, _, _ -> } // (id, downloaded, total, speed)
 ) {
     private val tag = "DownloadJobRunner"
     private val lastBytesSample = AtomicLong(0L)
     private val lastTimeSample = AtomicLong(System.currentTimeMillis())
     private val currentSpeed = AtomicLong(0L)
+    @Volatile
+    private var currentDownloadRef: DownloadItem? = null
+
+    private val bandwidthLimiter = BandwidthLimiter {
+        val globalLimit = settingsManager?.getGlobalSpeedLimit() ?: 0L
+        val downloadLimit = (currentDownloadRef?.speedLimitBytesPerSec ?: 0L).coerceAtLeast(0L)
+        when {
+            globalLimit > 0 && downloadLimit > 0 -> min(globalLimit, downloadLimit)
+            globalLimit > 0 -> globalLimit
+            downloadLimit > 0 -> downloadLimit
+            else -> 0L
+        }
+    }
 
     suspend fun run() = withContext(Dispatchers.IO) {
         var currentDownload = repository.getDownloadById(downloadId) ?: return@withContext
+        currentDownloadRef = currentDownload
         try {
             repository.updateDownloadStatus(downloadId, DownloadStatus.DETECTING)
 
@@ -106,6 +122,7 @@ class DownloadJobRunner(
                 status = DownloadStatus.DOWNLOADING
             )
             repository.updateDownload(currentDownload)
+            currentDownloadRef = currentDownload
 
             // Step 4: Execute transfer (Parallel chunk or single stream with fallback)
             if (supportsRange && totalBytes >= ChunkScheduler.MIN_CHUNK_SIZE && currentDownload.concurrency > 1) {
@@ -323,6 +340,7 @@ class DownloadJobRunner(
                         if (bytesRead == -1) break
 
                         currentCoroutineContext().ensureActive()
+                        bandwidthLimiter.throttle(bytesRead)
                         stagingFileManager.writeChunkData(stagingFile, currentWriteOffset, buffer, bytesRead)
                         currentWriteOffset += bytesRead
                         totalChunkDownloaded += bytesRead
@@ -435,6 +453,7 @@ class DownloadJobRunner(
 
                         while (input.read(buffer).also { bytesRead = it } != -1) {
                             currentCoroutineContext().ensureActive()
+                            bandwidthLimiter.throttle(bytesRead)
                             raf.write(buffer, 0, bytesRead)
                             currentWriteOffset += bytesRead
 

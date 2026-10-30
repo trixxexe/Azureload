@@ -20,6 +20,9 @@ class SettingsManager(context: Context) {
     private val _maxActiveTransfersFlow = MutableStateFlow(getMaxActiveTransfers())
     val maxActiveTransfersFlow: StateFlow<Int> = _maxActiveTransfersFlow.asStateFlow()
 
+    private val _globalSpeedLimitFlow = MutableStateFlow(getGlobalSpeedLimit())
+    val globalSpeedLimitFlow: StateFlow<Long> = _globalSpeedLimitFlow.asStateFlow()
+
     fun getWifiOnly(): Boolean = prefs.getBoolean(KEY_WIFI_ONLY, false)
 
     fun setWifiOnly(enabled: Boolean) {
@@ -43,11 +46,20 @@ class SettingsManager(context: Context) {
         _maxActiveTransfersFlow.value = clamped
     }
 
+    fun getGlobalSpeedLimit(): Long = prefs.getLong(KEY_GLOBAL_SPEED_LIMIT, 0L).coerceAtLeast(0L)
+
+    fun setGlobalSpeedLimit(limitBytesPerSec: Long) {
+        val clamped = limitBytesPerSec.coerceAtLeast(0L)
+        prefs.edit().putLong(KEY_GLOBAL_SPEED_LIMIT, clamped).apply()
+        _globalSpeedLimitFlow.value = clamped
+    }
+
     companion object {
         private const val PREFS_NAME = "azureload_settings"
         private const val KEY_WIFI_ONLY = "pref_wifi_only"
         private const val KEY_DEFAULT_CONCURRENCY = "pref_default_concurrency"
         private const val KEY_MAX_ACTIVE_TRANSFERS = "pref_max_active_transfers"
+        private const val KEY_GLOBAL_SPEED_LIMIT = "pref_global_speed_limit"
 
         fun isWifiConnected(context: Context): Boolean {
             val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false

@@ -50,7 +50,8 @@ data class DownloadItem(
     val updatedAt: Long = System.currentTimeMillis(),
     val errorMessage: String? = null,
     val customHeaders: Map<String, String> = emptyMap(),
-    val currentSpeedBytesPerSec: Long = 0L
+    val currentSpeedBytesPerSec: Long = 0L,
+    val speedLimitBytesPerSec: Long = 0L
 ) {
     val isParallelTransfer: Boolean
         get() = supportsRanges && concurrency > 1 && totalBytes >= 1024 * 1024L
@@ -66,6 +67,28 @@ data class DownloadItem(
             return concurrency.coerceIn(1, 16).coerceAtMost(maxChunks)
         }
         return 1
+    }
+}
+
+enum class FileCategory(val displayName: String) {
+    ALL("All"),
+    MEDIA("Media"),
+    DOCUMENTS("Docs"),
+    ARCHIVES("Archives"),
+    OTHER("Other")
+}
+
+fun DownloadItem.getFileCategory(): FileCategory {
+    val ext = fileName.substringAfterLast('.', "").lowercase()
+    val mime = mimeType?.lowercase().orEmpty()
+    return when {
+        mime.startsWith("video/") || mime.startsWith("audio/") || mime.startsWith("image/") ||
+        ext in listOf("mp4", "mkv", "avi", "mov", "webm", "mp3", "flac", "wav", "m4a", "ogg", "jpg", "jpeg", "png", "webp", "gif") -> FileCategory.MEDIA
+        mime.contains("pdf") || mime.contains("document") || mime.contains("text") ||
+        ext in listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "epub", "csv", "json") -> FileCategory.DOCUMENTS
+        mime.contains("zip") || mime.contains("tar") || mime.contains("archive") || mime.contains("android.package-archive") ||
+        ext in listOf("zip", "rar", "7z", "tar", "gz", "bz2", "xz", "apk", "iso", "dmg") -> FileCategory.ARCHIVES
+        else -> FileCategory.OTHER
     }
 }
 

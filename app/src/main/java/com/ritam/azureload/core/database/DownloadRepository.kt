@@ -45,6 +45,30 @@ class DownloadRepository(
         downloadDao.updateProgress(id, downloadedBytes)
     }
 
+    suspend fun updateSpeedLimit(id: Long, speedLimit: Long) {
+        downloadDao.updateSpeedLimit(id, speedLimit)
+    }
+
+    suspend fun clearCompleted(deleteFilesFromDisk: Boolean = false): Int {
+        val completed = downloadDao.getCompletedDownloads()
+        for (item in completed) {
+            if (deleteFilesFromDisk && !item.destinationPath.isNullOrBlank()) {
+                try {
+                    val file = java.io.File(item.destinationPath)
+                    if (file.exists()) {
+                        file.delete()
+                    }
+                } catch (_: Exception) {}
+            }
+            chunkDao.deleteForDownload(item.id)
+        }
+        return downloadDao.deleteCompleted()
+    }
+
+    suspend fun resumeAllPausedOrFailed(): Int {
+        return downloadDao.resumeAllPausedOrFailed()
+    }
+
     suspend fun deleteDownload(id: Long) {
         chunkDao.deleteForDownload(id)
         downloadDao.deleteById(id)

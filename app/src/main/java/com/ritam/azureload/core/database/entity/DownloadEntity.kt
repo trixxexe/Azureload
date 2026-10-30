@@ -26,7 +26,8 @@ data class DownloadEntity(
     val createdAt: Long,
     val updatedAt: Long,
     val errorMessage: String?,
-    val headersJson: String?
+    val headersJson: String?,
+    val speedLimitBytesPerSec: Long = 0L
 ) {
     fun toDomain(speed: Long = 0L): DownloadItem {
         return DownloadItem(
@@ -49,7 +50,8 @@ data class DownloadEntity(
             updatedAt = updatedAt,
             errorMessage = errorMessage,
             customHeaders = parseHeaders(headersJson),
-            currentSpeedBytesPerSec = speed
+            currentSpeedBytesPerSec = speed,
+            speedLimitBytesPerSec = speedLimitBytesPerSec
         )
     }
 
@@ -74,7 +76,8 @@ data class DownloadEntity(
                 createdAt = item.createdAt,
                 updatedAt = item.updatedAt,
                 errorMessage = item.errorMessage,
-                headersJson = serializeHeaders(item.customHeaders)
+                headersJson = serializeHeaders(item.customHeaders),
+                speedLimitBytesPerSec = item.speedLimitBytesPerSec
             )
         }
 

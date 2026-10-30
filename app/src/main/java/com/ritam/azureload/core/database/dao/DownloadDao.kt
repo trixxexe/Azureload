@@ -34,6 +34,18 @@ interface DownloadDao {
     @Query("UPDATE downloads SET status = :status, errorMessage = :errorMessage, updatedAt = :updatedAt WHERE id = :id")
     suspend fun updateStatus(id: Long, status: String, errorMessage: String? = null, updatedAt: Long = System.currentTimeMillis())
 
+    @Query("UPDATE downloads SET speedLimitBytesPerSec = :speedLimit, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateSpeedLimit(id: Long, speedLimit: Long, updatedAt: Long = System.currentTimeMillis())
+
+    @Query("SELECT * FROM downloads WHERE status = 'COMPLETED'")
+    suspend fun getCompletedDownloads(): List<DownloadEntity>
+
+    @Query("DELETE FROM downloads WHERE status = 'COMPLETED'")
+    suspend fun deleteCompleted(): Int
+
+    @Query("UPDATE downloads SET status = 'QUEUED', errorMessage = NULL, updatedAt = :updatedAt WHERE status = 'PAUSED' OR status = 'FAILED'")
+    suspend fun resumeAllPausedOrFailed(updatedAt: Long = System.currentTimeMillis()): Int
+
     @Query("DELETE FROM downloads WHERE id = :id")
     suspend fun deleteById(id: Long)
 
