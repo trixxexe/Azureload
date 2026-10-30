@@ -33,6 +33,8 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
@@ -619,15 +621,13 @@ class DownloadEngineIntegrationTest {
         val payload = ByteArray(totalSize)
         Random.nextBytes(payload)
 
-        val resumeRangesRequested = Collections.synchronizedList(mutableListOf<String>())
+        val pauseTriggered = CountDownLatch(1)
+        val allowServerToFinish = CountDownLatch(1)
         val isFirstRun = AtomicBoolean(true)
 
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 val range = request.getHeader("Range") ?: return MockResponse().setResponseCode(200).setBody(Buffer().write(payload))
-                if (!isFirstRun.get()) {
-                    resumeRangesRequested.add(range)
-                }
                 val clean = range.removePrefix("bytes=").trim()
                 val parts = clean.split("-")
                 val start = parts[0].toInt()
@@ -636,9 +636,20 @@ class DownloadEngineIntegrationTest {
                 val length = end - start + 1
                 val slice = payload.copyOfRange(start, start + length)
 
-                // In first run, introduce a delay on chunk downloads so cancellation catches it in mid-flight
                 if (isFirstRun.get() && length > 100) {
-                    Thread.sleep(60)
+                    if (start == 0) {
+                        // Allow chunk 0 to complete immediately
+                        return MockResponse()
+                            .setResponseCode(206)
+                            .setHeader("Content-Range", "bytes $start-$end/$totalSize")
+                            .setHeader("Content-Length", length.toString())
+                            .setBody(Buffer().write(slice))
+                    }
+                    // For chunks 1..3, signal and hold so cancellation happens mid-flight
+                    pauseTriggered.countDown()
+                    try {
+                        allowServerToFinish.await(3, TimeUnit.SECONDS)
+                    } catch (_: InterruptedException) {}
                 }
 
                 return MockResponse()
@@ -674,12 +685,10 @@ class DownloadEngineIntegrationTest {
             runner1.run()
         }
 
-        // Wait until chunks exist in database and at least one chunk has begun downloading
-        while (repository.getChunksForDownload(downloadId).isEmpty()) {
-            delay(10)
-        }
-        delay(80)
+        // Wait until chunk 0 completes and remaining chunks are held
+        pauseTriggered.await(5, TimeUnit.SECONDS)
         job.cancelAndJoin()
+        allowServerToFinish.countDown()
 
         // Verify paused state
         val pausedItem = repository.getDownloadById(downloadId)!!
