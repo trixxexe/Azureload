@@ -129,4 +129,124 @@ class ErrorHandlingTest {
         val parsedStorage = ErrorClassifier.parseOrClassify(rawStorage)
         assertEquals(ErrorCategory.STORAGE_FULL, parsedStorage.category)
     }
+
+    @Test
+    fun testStoragePermissionDeniedDbParsingDoesNotBecomeStorageFull() {
+        val rawPerm = "[Storage Permission Denied] Azureload lacks permission to write to the requested directory. — Grant storage access permissions in system settings."
+        val parsedPerm = ErrorClassifier.parseOrClassify(rawPerm)
+        assertEquals(ErrorCategory.PERMISSION_DENIED, parsedPerm.category)
+        assertEquals("Storage Permission Denied", parsedPerm.title)
+        assertTrue(parsedPerm.recoveryGuidance.contains("permission", ignoreCase = true))
+
+        val rawEacces = "write failed: EACCES (Permission denied to write /storage/emulated/0/Download)"
+        val parsedEacces = ErrorClassifier.parseOrClassify(rawEacces)
+        assertEquals(ErrorCategory.PERMISSION_DENIED, parsedEacces.category)
+    }
+
+    @Test
+    fun testHttp504GatewayTimeoutDoesNotBecomeSocketTimeout() {
+        val raw504 = "[HTTP 504 Gateway Timeout [HTTP 504]] Upstream server did not send response in time. — Network or gateway congested. Retry transfer."
+        val parsed504 = ErrorClassifier.parseOrClassify(raw504)
+        assertEquals(ErrorCategory.HTTP_SERVER, parsed504.category)
+        assertEquals(504, parsed504.httpStatusCode)
+        assertEquals("HTTP 504 Gateway Timeout", parsed504.title)
+    }
+
+    @Test
+    fun testWrappedExceptionsUnwrapping() {
+        val wrappedStorage = java.util.concurrent.ExecutionException(
+            "Wrapped task failure",
+            StorageFullException("Insufficient storage space: requires 1000000 bytes")
+        )
+        val classifiedStorage = ErrorClassifier.classify(wrappedStorage)
+        assertEquals(ErrorCategory.STORAGE_FULL, classifiedStorage.category)
+
+        val wrappedPerm = RuntimeException(
+            "Security wrapper",
+            StoragePermissionDeniedException("Cannot access folder")
+        )
+        val classifiedPerm = ErrorClassifier.classify(wrappedPerm)
+        assertEquals(ErrorCategory.PERMISSION_DENIED, classifiedPerm.category)
+
+        val wrappedHttp = IOException(
+            "Network wrapper",
+            FatalDownloadException("Server returned 404 Not Found", statusCode = 404)
+        )
+        val classifiedHttp = ErrorClassifier.classify(wrappedHttp)
+        assertEquals(ErrorCategory.HTTP_CLIENT, classifiedHttp.category)
+        assertEquals(404, classifiedHttp.httpStatusCode)
+
+        val wrappedIntegrity = java.util.concurrent.ExecutionException(
+            "Verification failure",
+            IntegrityVerificationException("Checksum mismatch")
+        )
+        val classifiedIntegrity = ErrorClassifier.classify(wrappedIntegrity)
+        assertEquals(ErrorCategory.INTEGRITY_MISMATCH, classifiedIntegrity.category)
+    }
+
+    @Test
+    fun testDiskIoErrorClassification() {
+        val diskIoException = DiskIoException("write failed: EIO (I/O error on block 4096)")
+        val classifiedDirect = ErrorClassifier.classify(diskIoException)
+        assertEquals(ErrorCategory.DISK_IO, classifiedDirect.category)
+        assertEquals("Disk I/O Failure", classifiedDirect.title)
+        assertTrue(classifiedDirect.recoveryGuidance.contains("storage medium", ignoreCase = true))
+
+        val rawIo = IOException("write failed: EIO (I/O error)")
+        val classifiedRaw = ErrorClassifier.classify(rawIo)
+        assertEquals(ErrorCategory.DISK_IO, classifiedRaw.category)
+
+        val parsedStored = ErrorClassifier.parseOrClassify("[Disk I/O Failure] An input/output error occurred while reading or writing device storage.")
+        assertEquals(ErrorCategory.DISK_IO, parsedStored.category)
+    }
+
+    @Test
+    fun testCycleProtectionInExceptionCauseChain() {
+        val ex1 = Exception("Exception 1")
+        val ex2 = object : Exception("Exception 2") {
+            override val cause: Throwable get() = ex1
+        }
+        val ex1WithCycle = object : Exception("Exception 1 cyclic") {
+            override val cause: Throwable get() = ex2
+        }
+
+        // Must terminate safely without infinite loop or StackOverflowError
+        val root = ErrorClassifier.findRootCause(ex1WithCycle)
+        assertNotNull(root)
+
+        val classified = ErrorClassifier.classify(ex1WithCycle)
+        assertNotNull(classified)
+    }
+
+    @Test
+    fun testRoundTripClassificationForCategories() {
+        val categoriesToTest = listOf(
+            ErrorCategory.DNS,
+            ErrorCategory.SSL,
+            ErrorCategory.TIMEOUT,
+            ErrorCategory.STORAGE_FULL,
+            ErrorCategory.DISK_IO,
+            ErrorCategory.PERMISSION_DENIED,
+            ErrorCategory.INTEGRITY_MISMATCH,
+            ErrorCategory.NETWORK_OFFLINE
+        )
+
+        for (cat in categoriesToTest) {
+            val original = when (cat) {
+                ErrorCategory.DNS -> ErrorClassifier.classify(UnknownHostException("Unable to resolve host"))
+                ErrorCategory.SSL -> ErrorClassifier.classify(javax.net.ssl.SSLHandshakeException("SSL Handshake failed"))
+                ErrorCategory.TIMEOUT -> ErrorClassifier.classify(SocketTimeoutException("Read timed out"))
+                ErrorCategory.STORAGE_FULL -> ErrorClassifier.classify(StorageFullException("Disk Storage Full: No space left on device"))
+                ErrorCategory.DISK_IO -> ErrorClassifier.classify(DiskIoException("Disk I/O error on device"))
+                ErrorCategory.PERMISSION_DENIED -> ErrorClassifier.classify(StoragePermissionDeniedException("Storage Permission Denied"))
+                ErrorCategory.INTEGRITY_MISMATCH -> ErrorClassifier.classify(IntegrityVerificationException("SHA-256 Checksum Mismatch"))
+                ErrorCategory.NETWORK_OFFLINE -> ErrorClassifier.classify(NetworkOfflineException("Network Offline"))
+                else -> error("Unexpected category: $cat")
+            }
+
+            val saved = original.toDisplayString()
+            val reparsed = ErrorClassifier.parseOrClassify(saved)
+            assertEquals("Round trip failed for category $cat: $saved", cat, reparsed.category)
+        }
+    }
 }

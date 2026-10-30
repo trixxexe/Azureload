@@ -108,8 +108,7 @@ class DownloadJobRunner(
             // Step 2: Storage space validation
             val bytesNeeded = if (totalBytes > 0) (totalBytes - currentDownload.downloadedBytes).coerceAtLeast(0) else 10L * 1024 * 1024
             if (!stagingFileManager.checkFreeSpace(bytesNeeded)) {
-                repository.updateDownloadStatus(downloadId, DownloadStatus.FAILED, "Insufficient storage space on device")
-                return@withContext
+                throw StorageFullException("Insufficient storage space: requires $bytesNeeded bytes")
             }
 
             // Step 3: Ensure staging file exists

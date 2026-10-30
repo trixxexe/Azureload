@@ -156,6 +156,7 @@ fun DiagnosticsScreen(
                         Triple("HTTP 4xx Client Errors", "401/403 (Auth/Forbidden), 404 (Missing), 429 (Rate-limited)", "Provides clear authentication notice, checks cookies, handles Retry-After delays."),
                         Triple("HTTP 5xx Server Errors", "500, 502, 503, 504 server crashes and outages", "Classifies as temporary host outage and schedules automatic recovery."),
                         Triple("Disk Storage Full", "ENOSPC, insufficient disk capacity", "Guards against pre-allocation failures and prompts user to free device memory."),
+                        Triple("Disk I/O Failure", "EIO, filesystem write error, storage corruption", "Guides user to verify storage medium mount state and filesystem health."),
                         Triple("Permission Denied", "EACCES, Scoped Storage access restrictions", "Informs user to grant file permissions or use internal staging storage."),
                         Triple("SHA-256 Mismatch", "Integrity checksum verification failure", "Safely flags corrupted downloads and provides one-tap restart.")
                     )

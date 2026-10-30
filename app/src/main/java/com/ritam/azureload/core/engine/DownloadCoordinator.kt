@@ -250,6 +250,12 @@ class DownloadCoordinator(
 
     fun clearCompleted(deleteFilesFromDisk: Boolean = false) {
         scope.launch {
+            val active = repository.getActiveOrPendingDownloads()
+            val activeIds = active.map { it.id }.toSet()
+            val currentHistories = _speedHistory.value
+            if (currentHistories.keys.any { !activeIds.contains(it) }) {
+                _speedHistory.value = currentHistories.filterKeys { activeIds.contains(it) }
+            }
             repository.clearCompleted(deleteFilesFromDisk)
         }
     }

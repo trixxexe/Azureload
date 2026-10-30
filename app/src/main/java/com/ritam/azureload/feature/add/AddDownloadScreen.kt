@@ -22,11 +22,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ritam.azureload.core.model.ServerCapability
 import com.ritam.azureload.core.network.CapabilityDetector
+import com.ritam.azureload.core.network.ErrorClassifier
 import com.ritam.azureload.core.storage.FileNameSanitizer
 import com.ritam.azureload.feature.dashboard.formatBytes
 import com.ritam.azureload.feature.dashboard.formatSpeed
 import com.ritam.azureload.ui.components.LiquidGlassButton
 import com.ritam.azureload.ui.components.LiquidGlassCard
+import com.ritam.azureload.ui.components.LiquidGlassErrorCard
 import com.ritam.azureload.ui.components.LiquidGlassPill
 import com.ritam.azureload.ui.theme.*
 import kotlinx.coroutines.launch
@@ -79,7 +81,8 @@ fun AddDownloadScreen(
                     fileName = FileNameSanitizer.sanitize(cap.suggestedFileName)
                 }
             } catch (e: Exception) {
-                inspectionError = e.message ?: "Failed to inspect remote resource"
+                val classified = ErrorClassifier.classify(e)
+                inspectionError = classified.toDisplayString()
             } finally {
                 isInspecting = false
             }
@@ -161,6 +164,7 @@ fun AddDownloadScreen(
                         onClick = { inspectUrl() },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = url.isNotBlank() && !isInspecting,
+                        isSolid = true,
                         accentColor = AzurePrimary,
                         cornerRadius = 14.dp
                     ) {
@@ -179,23 +183,21 @@ fun AddDownloadScreen(
 
             // Capability preview
             AnimatedVisibility(visible = capabilityResult != null || inspectionError != null) {
-                LiquidGlassCard(
-                    cornerRadius = 18.dp,
-                    isHighlighted = capabilityResult != null,
-                    highlightColor = if (capabilityResult?.supportsRange == true) AzureSuccess else AzureSecondary
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        if (inspectionError != null) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Warning, contentDescription = null, tint = AzureError)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = inspectionError ?: "",
-                                    color = AzureError,
-                                    fontSize = 13.sp
-                                )
-                            }
-                        } else capabilityResult?.let { cap ->
+                if (inspectionError != null) {
+                    val classified = remember(inspectionError) {
+                        ErrorClassifier.parseOrClassify(inspectionError)
+                    }
+                    LiquidGlassErrorCard(
+                        error = classified,
+                        onRetry = { inspectUrl() }
+                    )
+                } else capabilityResult?.let { cap ->
+                    LiquidGlassCard(
+                        cornerRadius = 18.dp,
+                        isHighlighted = true,
+                        highlightColor = if (cap.supportsRange) AzureSuccess else AzureSecondary
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 LiquidGlassPill(
                                     tint = if (cap.supportsRange) AzureSuccess else AzureSecondary,
@@ -317,6 +319,7 @@ fun AddDownloadScreen(
                             val isSelected = speedLimitBytes == bytes
                             LiquidGlassPill(
                                 tint = if (isSelected) AzurePrimary else null,
+                                isSolid = isSelected,
                                 cornerRadius = 10.dp,
                                 onClick = { speedLimitBytes = bytes }
                             ) {
@@ -398,6 +401,7 @@ fun AddDownloadScreen(
                     .height(54.dp),
                 cornerRadius = 16.dp,
                 enabled = url.isNotBlank(),
+                isSolid = true,
                 accentColor = AzurePrimary
             ) {
                 Icon(Icons.Default.Download, contentDescription = null, tint = PureBlack, modifier = Modifier.size(20.dp))

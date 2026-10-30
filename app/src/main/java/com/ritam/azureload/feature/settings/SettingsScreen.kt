@@ -184,6 +184,7 @@ fun SettingsScreen(
                             val isSelected = globalSpeedLimit == bytes
                             LiquidGlassPill(
                                 tint = if (isSelected) AzurePrimary else null,
+                                isSolid = isSelected,
                                 cornerRadius = 12.dp,
                                 onClick = { settingsManager.setGlobalSpeedLimit(bytes) }
                             ) {

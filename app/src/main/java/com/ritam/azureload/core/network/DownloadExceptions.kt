@@ -19,6 +19,7 @@ enum class ErrorCategory {
     HTTP_CLIENT,
     HTTP_SERVER,
     STORAGE_FULL,
+    DISK_IO,
     PERMISSION_DENIED,
     INTEGRITY_MISMATCH,
     NETWORK_OFFLINE,
@@ -70,6 +71,11 @@ class StorageFullException(
     cause: Throwable? = null
 ) : DownloadException(message, ErrorCategory.STORAGE_FULL, null, cause)
 
+class DiskIoException(
+    message: String,
+    cause: Throwable? = null
+) : DownloadException(message, ErrorCategory.DISK_IO, null, cause)
+
 class StoragePermissionDeniedException(
     message: String,
     cause: Throwable? = null
@@ -91,8 +97,33 @@ object ErrorClassifier {
         val root = findRootCause(throwable)
         val raw = root.message ?: throwable.message ?: "Unknown error"
 
-        // 1. DNS Resolution
-        if (root is UnknownHostException || raw.contains("Unable to resolve host", ignoreCase = true) || raw.contains("No address associated with hostname", ignoreCase = true)) {
+        val offlineEx = findInChain<NetworkOfflineException>(throwable)
+        val dnsEx = findInChain<UnknownHostException>(throwable)
+        val sslEx = findInChain<SSLException>(throwable) ?: findInChain<CertificateException>(throwable)
+        val permEx = findInChain<StoragePermissionDeniedException>(throwable) ?: findInChain<SecurityException>(throwable)
+        val storageFullEx = findInChain<StorageFullException>(throwable)
+        val diskIoEx = findInChain<DiskIoException>(throwable)
+        val integrityEx = findInChain<IntegrityVerificationException>(throwable)
+        val timeoutEx = findInChain<SocketTimeoutException>(throwable)
+            ?: findInChain<ConnectException>(throwable)
+            ?: findInChain<NoRouteToHostException>(throwable)
+            ?: findInChain<PortUnreachableException>(throwable)
+        val dlEx = findInChain<DownloadException>(throwable)
+
+        // 1. Network Offline
+        if (offlineEx != null || raw.contains("Waiting for Wi-Fi", ignoreCase = true) || raw.contains("No internet connection", ignoreCase = true)) {
+            return ClassifiedDownloadError(
+                category = ErrorCategory.NETWORK_OFFLINE,
+                title = "Network Offline",
+                userMessage = "Transfer paused waiting for required network connectivity.",
+                recoveryGuidance = "Connect to Wi-Fi or active mobile network to continue downloading.",
+                isRetryable = true,
+                rawMessage = raw
+            )
+        }
+
+        // 2. DNS Resolution
+        if (dnsEx != null || raw.contains("Unable to resolve host", ignoreCase = true) || raw.contains("No address associated with hostname", ignoreCase = true)) {
             return ClassifiedDownloadError(
                 category = ErrorCategory.DNS,
                 title = "DNS Lookup Failed",
@@ -103,10 +134,8 @@ object ErrorClassifier {
             )
         }
 
-        // 2. SSL / TLS Security Handshake
-        if (root is SSLHandshakeException || root is SSLPeerUnverifiedException || root is SSLException || root is CertificateException ||
-            raw.contains("SSL", ignoreCase = true) || raw.contains("CertPathValidatorException", ignoreCase = true)
-        ) {
+        // 3. SSL / TLS Security Handshake
+        if (sslEx != null || raw.contains("SSL", ignoreCase = true) || raw.contains("TLS", ignoreCase = true) || raw.contains("CertPathValidatorException", ignoreCase = true)) {
             return ClassifiedDownloadError(
                 category = ErrorCategory.SSL,
                 title = "SSL / TLS Handshake Error",
@@ -117,9 +146,56 @@ object ErrorClassifier {
             )
         }
 
-        // 3. Socket / Connection Timeouts
-        if (root is SocketTimeoutException || root is ConnectException || root is NoRouteToHostException || root is PortUnreachableException ||
-            (root is InterruptedIOException && !raw.contains("cancel", ignoreCase = true)) ||
+        // 4. Permission Denied (Checked BEFORE storage full so permission errors mentioning "storage" are not misclassified)
+        if (permEx != null || raw.contains("EACCES", ignoreCase = true) || raw.contains("Permission denied", ignoreCase = true) || raw.contains("Access denied", ignoreCase = true)) {
+            return ClassifiedDownloadError(
+                category = ErrorCategory.PERMISSION_DENIED,
+                title = "Storage Permission Denied",
+                userMessage = "Azureload lacks permission to write to the requested directory.",
+                recoveryGuidance = "Grant storage access permissions in system settings or select internal app storage.",
+                isRetryable = true,
+                rawMessage = raw
+            )
+        }
+
+        // 5. Storage Full
+        if (storageFullEx != null || raw.contains("ENOSPC", ignoreCase = true) || raw.contains("No space left on device", ignoreCase = true) || raw.contains("Insufficient storage", ignoreCase = true) || raw.contains("Storage Full", ignoreCase = true)) {
+            return ClassifiedDownloadError(
+                category = ErrorCategory.STORAGE_FULL,
+                title = "Disk Storage Full",
+                userMessage = "Device storage ran out during download or staging allocation.",
+                recoveryGuidance = "Free up storage space on your device and tap Resume.",
+                isRetryable = true,
+                rawMessage = raw
+            )
+        }
+
+        // 6. Disk I/O Failure
+        if (diskIoEx != null || raw.contains("EIO", ignoreCase = true) || raw.contains("Disk I/O error", ignoreCase = true) || raw.contains("I/O error", ignoreCase = true) || raw.contains("EROFS", ignoreCase = true) || raw.contains("Read-only file system", ignoreCase = true)) {
+            return ClassifiedDownloadError(
+                category = ErrorCategory.DISK_IO,
+                title = "Disk I/O Failure",
+                userMessage = "An input/output error occurred while reading or writing device storage.",
+                recoveryGuidance = "Verify that your storage medium is mounted, not corrupted or full, and restart the transfer.",
+                isRetryable = true,
+                rawMessage = raw
+            )
+        }
+
+        // 7. Integrity / Checksum Mismatch
+        if (integrityEx != null || raw.contains("SHA-256", ignoreCase = true) || raw.contains("checksum mismatch", ignoreCase = true) || raw.contains("Integrity check failed", ignoreCase = true)) {
+            return ClassifiedDownloadError(
+                category = ErrorCategory.INTEGRITY_MISMATCH,
+                title = "SHA-256 Checksum Mismatch",
+                userMessage = "Downloaded file hash does not match expected integrity checksum.",
+                recoveryGuidance = "The file was corrupted during transit. Redownload the file from source.",
+                isRetryable = true,
+                rawMessage = raw
+            )
+        }
+
+        // 8. Socket / Connection Timeouts
+        if (timeoutEx != null || (root is InterruptedIOException && !raw.contains("cancel", ignoreCase = true)) ||
             raw.contains("timed out", ignoreCase = true) || raw.contains("timeout", ignoreCase = true) || raw.contains("Connection refused", ignoreCase = true)
         ) {
             return ClassifiedDownloadError(
@@ -132,65 +208,13 @@ object ErrorClassifier {
             )
         }
 
-        // 4. Storage Full
-        if (throwable is StorageFullException || raw.contains("ENOSPC", ignoreCase = true) || raw.contains("No space left on device", ignoreCase = true) || raw.contains("Insufficient storage", ignoreCase = true)) {
-            return ClassifiedDownloadError(
-                category = ErrorCategory.STORAGE_FULL,
-                title = "Disk Storage Full",
-                userMessage = "Device storage ran out during download or staging allocation.",
-                recoveryGuidance = "Free up storage space on your device and tap Resume.",
-                isRetryable = true,
-                rawMessage = raw
-            )
-        }
-
-        // 5. Permission Denied
-        if (throwable is StoragePermissionDeniedException || root is SecurityException || raw.contains("EACCES", ignoreCase = true) || raw.contains("Permission denied", ignoreCase = true)) {
-            return ClassifiedDownloadError(
-                category = ErrorCategory.PERMISSION_DENIED,
-                title = "Storage Permission Denied",
-                userMessage = "Azureload lacks permission to write to the requested directory.",
-                recoveryGuidance = "Grant storage access permissions in system settings or select internal app storage.",
-                isRetryable = true,
-                rawMessage = raw
-            )
-        }
-
-        // 6. Integrity / Checksum Mismatch
-        if (throwable is IntegrityVerificationException || raw.contains("SHA-256", ignoreCase = true) || raw.contains("checksum mismatch", ignoreCase = true) || raw.contains("Integrity check failed", ignoreCase = true)) {
-            return ClassifiedDownloadError(
-                category = ErrorCategory.INTEGRITY_MISMATCH,
-                title = "SHA-256 Checksum Mismatch",
-                userMessage = "Downloaded file hash does not match expected integrity checksum.",
-                recoveryGuidance = "The file was corrupted during transit. Redownload the file from source.",
-                isRetryable = true,
-                rawMessage = raw
-            )
-        }
-
-        // 7. Network Offline
-        if (throwable is NetworkOfflineException || raw.contains("Waiting for Wi-Fi", ignoreCase = true) || raw.contains("No internet connection", ignoreCase = true)) {
-            return ClassifiedDownloadError(
-                category = ErrorCategory.NETWORK_OFFLINE,
-                title = "Network Offline",
-                userMessage = "Transfer paused waiting for required network connectivity.",
-                recoveryGuidance = "Connect to Wi-Fi or active mobile network to continue downloading.",
-                isRetryable = true,
-                rawMessage = raw
-            )
-        }
-
-        // 8. HTTP Status Codes
-        val statusCode = when (throwable) {
-            is DownloadException -> throwable.statusCode
-            else -> null
-        } ?: extractStatusCode(raw)
-
+        // 9. HTTP Status Codes
+        val statusCode = dlEx?.statusCode ?: extractStatusCode(raw)
         if (statusCode != null) {
             return classifyHttpCode(statusCode, raw)
         }
 
-        // 9. Unexpected EOF or truncated stream
+        // 10. Unexpected EOF or truncated stream
         if (raw.contains("Unexpected EOF", ignoreCase = true) || raw.contains("premature EOF", ignoreCase = true)) {
             return ClassifiedDownloadError(
                 category = ErrorCategory.TIMEOUT,
@@ -224,19 +248,35 @@ object ErrorClassifier {
             )
         }
 
-        // If it starts with an existing classified format [Title [HTTP Code]]
+        // If an explicit HTTP status code is present in the stored string (e.g., "[HTTP 504 Gateway Timeout [HTTP 504]]"),
+        // prioritize it over generic words like "timeout"
         val code = extractStatusCode(raw)
+        if (code != null) {
+            return classifyHttpCode(code, raw)
+        }
+
         return when {
-            raw.contains("DNS", ignoreCase = true) -> classify(UnknownHostException(raw))
-            raw.contains("SSL", ignoreCase = true) || raw.contains("TLS", ignoreCase = true) -> classify(SSLException(raw))
-            raw.contains("timed out", ignoreCase = true) || raw.contains("timeout", ignoreCase = true) -> classify(SocketTimeoutException(raw))
-            raw.contains("ENOSPC", ignoreCase = true) || raw.contains("Storage", ignoreCase = true) || raw.contains("No space", ignoreCase = true) -> classify(StorageFullException(raw))
-            raw.contains("Permission", ignoreCase = true) || raw.contains("EACCES", ignoreCase = true) -> classify(StoragePermissionDeniedException(raw))
-            raw.contains("SHA-256", ignoreCase = true) || raw.contains("Integrity", ignoreCase = true) -> classify(IntegrityVerificationException(raw))
-            raw.contains("Wi-Fi", ignoreCase = true) || raw.contains("Offline", ignoreCase = true) -> classify(NetworkOfflineException(raw))
-            code != null -> classifyHttpCode(code, raw)
-            raw.contains("Unexpected EOF", ignoreCase = true) -> classify(IOException(raw))
-            else -> classify(IOException(raw))
+            // Permission checked first so messages mentioning "Storage Permission Denied" are not classified as storage full
+            raw.contains("Permission", ignoreCase = true) || raw.contains("EACCES", ignoreCase = true) || raw.contains("Access denied", ignoreCase = true) ->
+                classify(StoragePermissionDeniedException(raw))
+            raw.contains("DNS", ignoreCase = true) || raw.contains("resolve host", ignoreCase = true) || raw.contains("No address associated", ignoreCase = true) ->
+                classify(UnknownHostException(raw))
+            raw.contains("SSL", ignoreCase = true) || raw.contains("TLS", ignoreCase = true) || raw.contains("CertPath", ignoreCase = true) ->
+                classify(SSLException(raw))
+            raw.contains("Storage Full", ignoreCase = true) || raw.contains("Disk Storage Full", ignoreCase = true) || raw.contains("ENOSPC", ignoreCase = true) || raw.contains("No space", ignoreCase = true) || raw.contains("Insufficient storage", ignoreCase = true) ->
+                classify(StorageFullException(raw))
+            raw.contains("Disk I/O", ignoreCase = true) || raw.contains("EIO", ignoreCase = true) || raw.contains("I/O error", ignoreCase = true) || raw.contains("EROFS", ignoreCase = true) ->
+                classify(DiskIoException(raw))
+            raw.contains("SHA-256", ignoreCase = true) || raw.contains("MD5", ignoreCase = true) || raw.contains("Integrity", ignoreCase = true) || raw.contains("checksum mismatch", ignoreCase = true) ->
+                classify(IntegrityVerificationException(raw))
+            raw.contains("Wi-Fi", ignoreCase = true) || raw.contains("Offline", ignoreCase = true) ->
+                classify(NetworkOfflineException(raw))
+            raw.contains("timed out", ignoreCase = true) || raw.contains("timeout", ignoreCase = true) || raw.contains("Connection refused", ignoreCase = true) ->
+                classify(SocketTimeoutException(raw))
+            raw.contains("Unexpected EOF", ignoreCase = true) ->
+                classify(IOException(raw))
+            else ->
+                classify(IOException(raw))
         }
     }
 
@@ -368,11 +408,22 @@ object ErrorClassifier {
         return match?.groupValues?.get(1)?.toIntOrNull()
     }
 
-    private fun findRootCause(throwable: Throwable): Throwable {
+    fun findRootCause(throwable: Throwable): Throwable {
         var current: Throwable = throwable
-        while (current.cause != null && current.cause != current) {
+        val seen = mutableSetOf<Throwable>()
+        while (current.cause != null && current.cause !== current && seen.add(current)) {
             current = current.cause!!
         }
         return current
+    }
+
+    inline fun <reified T : Throwable> findInChain(throwable: Throwable): T? {
+        var current: Throwable? = throwable
+        val seen = mutableSetOf<Throwable>()
+        while (current != null && seen.add(current)) {
+            if (current is T) return current
+            current = current.cause
+        }
+        return null
     }
 }

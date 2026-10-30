@@ -37,6 +37,7 @@ fun LiquidGlassCard(
     cornerRadius: Dp = 20.dp,
     isHighlighted: Boolean = false,
     highlightColor: Color = NeonCyan,
+    onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val shape = remember(cornerRadius) { SquircleShape(cornerRadius) }
@@ -52,9 +53,20 @@ fun LiquidGlassCard(
         label = "borderBottom"
     )
 
+    val clickModifier = if (onClick != null) {
+        Modifier
+            .clip(shape)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple()
+            ) { onClick() }
+    } else {
+        Modifier.clip(shape)
+    }
+
     Box(
         modifier = modifier
-            .clip(shape)
+            .then(clickModifier)
             .background(
                 brush = Brush.verticalGradient(
                     colors = if (isHighlighted) {
@@ -84,6 +96,66 @@ fun LiquidGlassCard(
 }
 
 /**
+ * Frosted Glass Card alias conforming to LastWave/FloWave design system.
+ */
+@Composable
+fun GlassCard(
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 20.dp,
+    onClick: (() -> Unit)? = null,
+    content: @Composable BoxScope.() -> Unit
+) {
+    LiquidGlassCard(
+        modifier = modifier,
+        cornerRadius = cornerRadius,
+        onClick = onClick,
+        content = content
+    )
+}
+
+/**
+ * Liquid Glass Action Tile widget for dashboard quick shortcuts and operations.
+ */
+@Composable
+fun LiquidGlassActionTile(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    accentColor: Color = NeonCyan
+) {
+    LiquidGlassCard(
+        modifier = modifier,
+        cornerRadius = 20.dp,
+        onClick = onClick
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = accentColor,
+                modifier = Modifier.size(28.dp)
+            )
+            Text(
+                text = title,
+                color = AzureOnSurface,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = subtitle,
+                color = AzureOnSurfaceVariant,
+                fontSize = 11.sp
+            )
+        }
+    }
+}
+
+/**
  * Liquid Glass Pill / Capsule for chips, status tags, badges, and quick filters.
  */
 @Composable
@@ -92,6 +164,7 @@ fun LiquidGlassPill(
     cornerRadius: Dp = 100.dp,
     tint: Color? = null,
     borderAlpha: Float = 0.35f,
+    isSolid: Boolean = false,
     onClick: (() -> Unit)? = null,
     content: @Composable RowScope.() -> Unit
 ) {
@@ -99,41 +172,65 @@ fun LiquidGlassPill(
     val baseModifier = if (onClick != null) {
         modifier
             .clip(shape)
-            .clickable { onClick() }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = ripple()
+            ) { onClick() }
     } else {
         modifier.clip(shape)
     }
 
-    val bgBrush = if (tint != null) {
-        Brush.verticalGradient(
-            colors = listOf(
-                tint.copy(alpha = 0.22f),
-                tint.copy(alpha = 0.08f)
+    val bgBrush = when {
+        isSolid -> {
+            val primaryColor = tint ?: NeonCyan
+            val secondaryColor = if (primaryColor == NeonCyan) AzurePrimary else primaryColor.copy(alpha = 0.85f)
+            Brush.horizontalGradient(
+                colors = listOf(primaryColor, secondaryColor)
             )
-        )
-    } else {
-        Brush.verticalGradient(
-            colors = listOf(
-                Color(0x24FFFFFF),
-                Color(0x0CFFFFFF)
+        }
+        tint != null -> {
+            Brush.verticalGradient(
+                colors = listOf(
+                    tint.copy(alpha = 0.22f),
+                    tint.copy(alpha = 0.08f)
+                )
             )
-        )
+        }
+        else -> {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color(0x24FFFFFF),
+                    Color(0x0CFFFFFF)
+                )
+            )
+        }
     }
 
-    val borderBrush = if (tint != null) {
-        Brush.verticalGradient(
-            colors = listOf(
-                tint.copy(alpha = (borderAlpha + 0.2f).coerceAtMost(1f)),
-                tint.copy(alpha = (borderAlpha * 0.5f).coerceAtMost(1f))
+    val borderBrush = when {
+        isSolid -> {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color(0x80FFFFFF),
+                    Color(0x30FFFFFF)
+                )
             )
-        )
-    } else {
-        Brush.verticalGradient(
-            colors = listOf(
-                Color(0x45FFFFFF),
-                Color(0x10FFFFFF)
+        }
+        tint != null -> {
+            Brush.verticalGradient(
+                colors = listOf(
+                    tint.copy(alpha = (borderAlpha + 0.2f).coerceAtMost(1f)),
+                    tint.copy(alpha = (borderAlpha * 0.5f).coerceAtMost(1f))
+                )
             )
-        )
+        }
+        else -> {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color(0x45FFFFFF),
+                    Color(0x10FFFFFF)
+                )
+            )
+        }
     }
 
     Row(
@@ -155,6 +252,7 @@ fun LiquidGlassButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    isSolid: Boolean = false,
     accentColor: Color = AzurePrimary,
     cornerRadius: Dp = 16.dp,
     contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
@@ -162,41 +260,37 @@ fun LiquidGlassButton(
 ) {
     val shape = remember(cornerRadius) { SquircleShape(cornerRadius) }
 
+    val bgBrush = when {
+        !enabled -> Brush.verticalGradient(listOf(Color(0x10FFFFFF), Color(0x05FFFFFF)))
+        isSolid -> {
+            val startColor = if (accentColor == AzurePrimary) NeonCyan else accentColor
+            val endColor = if (accentColor == AzurePrimary) AzurePrimary else accentColor.copy(alpha = 0.85f)
+            Brush.horizontalGradient(listOf(startColor, endColor))
+        }
+        else -> Brush.verticalGradient(
+            listOf(
+                accentColor.copy(alpha = 0.26f),
+                accentColor.copy(alpha = 0.10f)
+            )
+        )
+    }
+
+    val borderBrush = when {
+        !enabled -> Brush.verticalGradient(listOf(Color(0x1AFFFFFF), Color(0x08FFFFFF)))
+        isSolid -> Brush.verticalGradient(listOf(Color(0x90FFFFFF), Color(0x30FFFFFF)))
+        else -> Brush.verticalGradient(
+            listOf(
+                accentColor.copy(alpha = 0.65f),
+                accentColor.copy(alpha = 0.20f)
+            )
+        )
+    }
+
     Box(
         modifier = modifier
             .clip(shape)
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = if (enabled) {
-                        listOf(
-                            accentColor.copy(alpha = 0.28f),
-                            accentColor.copy(alpha = 0.12f)
-                        )
-                    } else {
-                        listOf(
-                            Color(0x10FFFFFF),
-                            Color(0x05FFFFFF)
-                        )
-                    }
-                )
-            )
-            .border(
-                width = 1.dp,
-                brush = Brush.verticalGradient(
-                    colors = if (enabled) {
-                        listOf(
-                            accentColor.copy(alpha = 0.65f),
-                            accentColor.copy(alpha = 0.20f)
-                        )
-                    } else {
-                        listOf(
-                            Color(0x1AFFFFFF),
-                            Color(0x08FFFFFF)
-                        )
-                    }
-                ),
-                shape = shape
-            )
+            .background(bgBrush)
+            .border(1.dp, borderBrush, shape)
             .clickable(
                 enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },
@@ -295,6 +389,7 @@ fun LiquidGlassErrorCard(
         ErrorCategory.SSL -> NeonPink
         ErrorCategory.TIMEOUT -> AzureWarning
         ErrorCategory.STORAGE_FULL -> Color(0xFFFF9100)
+        ErrorCategory.DISK_IO -> Color(0xFFFF6D00)
         ErrorCategory.PERMISSION_DENIED -> AzureError
         ErrorCategory.INTEGRITY_MISMATCH -> Color(0xFFFF1744)
         ErrorCategory.HTTP_CLIENT -> AzureError
@@ -307,6 +402,7 @@ fun LiquidGlassErrorCard(
         ErrorCategory.SSL -> Icons.Default.Lock
         ErrorCategory.TIMEOUT -> Icons.Default.HourglassEmpty
         ErrorCategory.STORAGE_FULL -> Icons.Default.DiscFull
+        ErrorCategory.DISK_IO -> Icons.Default.Save
         ErrorCategory.PERMISSION_DENIED -> Icons.Default.Security
         ErrorCategory.INTEGRITY_MISMATCH -> Icons.Default.ChecklistRtl
         ErrorCategory.HTTP_CLIENT -> Icons.Default.Warning
@@ -454,6 +550,7 @@ fun LiquidGlassErrorCard(
                 if (onRetry != null) {
                     LiquidGlassButton(
                         onClick = onRetry,
+                        isSolid = true,
                         accentColor = if (error.isRetryable) AzurePrimary else AzureWarning,
                         cornerRadius = 10.dp,
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)

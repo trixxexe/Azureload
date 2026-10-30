@@ -45,20 +45,29 @@ fun BrowserScreen(
     var isLoading by remember { mutableStateOf(false) }
     var loadingProgress by remember { mutableStateOf(0) }
 
+    var isDestroyed by remember { mutableStateOf(false) }
+
+    val destroyWebViewSafely: (WebView?) -> Unit = remember {
+        { view ->
+            if (view != null && !isDestroyed) {
+                isDestroyed = true
+                try {
+                    view.stopLoading()
+                    view.setDownloadListener(null)
+                    view.webViewClient = WebViewClient()
+                    view.webChromeClient = WebChromeClient()
+                    view.loadUrl("about:blank")
+                    view.removeAllViews()
+                    view.destroy()
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
     // Memory Leak Protection: Guarantee cleanup and destruction of WebView upon composition disposal
     DisposableEffect(Unit) {
         onDispose {
-            try {
-                webView?.apply {
-                    stopLoading()
-                    setDownloadListener(null)
-                    webViewClient = WebViewClient()
-                    webChromeClient = WebChromeClient()
-                    loadUrl("about:blank")
-                    removeAllViews()
-                    destroy()
-                }
-            } catch (_: Exception) {}
+            destroyWebViewSafely(webView)
             webView = null
         }
     }
@@ -306,15 +315,8 @@ fun BrowserScreen(
                 webView = view
             },
             onRelease = { view ->
-                try {
-                    view.stopLoading()
-                    view.setDownloadListener(null)
-                    view.webViewClient = WebViewClient()
-                    view.webChromeClient = WebChromeClient()
-                    view.loadUrl("about:blank")
-                    view.removeAllViews()
-                    view.destroy()
-                } catch (_: Exception) {}
+                destroyWebViewSafely(view)
+                webView = null
             }
         )
     }

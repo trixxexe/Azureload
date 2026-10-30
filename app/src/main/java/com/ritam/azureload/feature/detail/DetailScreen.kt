@@ -355,15 +355,16 @@ fun DetailScreen(
                                         modifier = Modifier.weight(1f),
                                         accentColor = AzureWarning
                                     ) {
-                                        Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureBlack)
+                                        Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(18.dp), tint = AzureWarning)
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Pause", color = PureBlack, fontWeight = FontWeight.Bold)
+                                        Text("Pause", color = AzureWarning, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 DownloadStatus.PAUSED -> {
                                     LiquidGlassButton(
                                         onClick = { onResume(download.id) },
                                         modifier = Modifier.weight(1f),
+                                        isSolid = true,
                                         accentColor = AzurePrimary
                                     ) {
                                         Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureBlack)
@@ -375,6 +376,7 @@ fun DetailScreen(
                                     LiquidGlassButton(
                                         onClick = { onRetry(download.id) },
                                         modifier = Modifier.weight(1f),
+                                        isSolid = true,
                                         accentColor = AzurePrimary
                                     ) {
                                         Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureBlack)
@@ -386,6 +388,7 @@ fun DetailScreen(
                                     LiquidGlassButton(
                                         onClick = { onOpenFile(download) },
                                         modifier = Modifier.weight(1f),
+                                        isSolid = true,
                                         accentColor = AzurePrimary
                                     ) {
                                         Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureBlack)
@@ -397,9 +400,9 @@ fun DetailScreen(
                                         modifier = Modifier.weight(1f),
                                         accentColor = AzureSecondary
                                     ) {
-                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureBlack)
+                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp), tint = AzureSecondary)
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Share", color = PureBlack, fontWeight = FontWeight.Bold)
+                                        Text("Share", color = AzureSecondary, fontWeight = FontWeight.Bold)
                                     }
                                 }
                                 else -> {}
@@ -535,6 +538,7 @@ fun DetailScreen(
                                 val isSelected = currentLimitBytes == bytes
                                 LiquidGlassPill(
                                     tint = if (isSelected) AzurePrimary else null,
+                                    isSolid = isSelected,
                                     cornerRadius = 10.dp,
                                     onClick = {
                                         currentLimitBytes = bytes
@@ -617,6 +621,7 @@ fun DetailScreen(
                                 },
                                 enabled = !isCalculatingChecksum,
                                 modifier = Modifier.fillMaxWidth(),
+                                isSolid = true,
                                 accentColor = AzureSuccess,
                                 cornerRadius = 12.dp
                             ) {

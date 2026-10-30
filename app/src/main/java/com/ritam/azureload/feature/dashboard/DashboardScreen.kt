@@ -184,6 +184,7 @@ fun DashboardScreen(
         floatingActionButton = {
             LiquidGlassButton(
                 onClick = onNavigateToAdd,
+                isSolid = true,
                 accentColor = AzurePrimary,
                 cornerRadius = 20.dp,
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 14.dp)
@@ -267,9 +268,9 @@ fun DashboardScreen(
                             cornerRadius = 10.dp,
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                         ) {
-                            Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(14.dp), tint = PureBlack)
+                            Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(14.dp), tint = AzureWarning)
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Pause All", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PureBlack)
+                            Text("Pause All", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AzureWarning)
                         }
                     }
                 }
@@ -316,6 +317,7 @@ fun DashboardScreen(
                     val isSelected = selectedCategory == cat
                     LiquidGlassPill(
                         tint = if (isSelected) AzurePrimary else null,
+                        isSolid = isSelected,
                         cornerRadius = 10.dp,
                         onClick = { selectedCategory = cat }
                     ) {
@@ -375,6 +377,7 @@ fun DashboardScreen(
                     LiquidGlassPill(
                         modifier = Modifier.weight(1f),
                         tint = if (isSelected) AzurePrimary else null,
+                        isSolid = isSelected,
                         cornerRadius = 12.dp,
                         onClick = { selectedTab = tab }
                     ) {
@@ -408,7 +411,8 @@ fun DashboardScreen(
                         if (failedOrPausedCount > 0) {
                             LiquidGlassButton(
                                 onClick = onResumeAll,
-                                accentColor = AzurePrimary,
+                                isSolid = true,
+                                accentColor = NeonCyan,
                                 cornerRadius = 8.dp,
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                             ) {
@@ -483,6 +487,7 @@ fun DashboardScreen(
                                         selectedCategory = FileCategory.ALL
                                         selectedTab = FilterTab.ALL
                                     },
+                                    isSolid = true,
                                     accentColor = AzurePrimary,
                                     cornerRadius = 10.dp
                                 ) {
@@ -598,12 +603,11 @@ fun DownloadCard(
     }
 
     LiquidGlassCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
+        modifier = Modifier.fillMaxWidth(),
         cornerRadius = 20.dp,
         isHighlighted = item.status == DownloadStatus.DOWNLOADING,
-        highlightColor = NeonCyan
+        highlightColor = NeonCyan,
+        onClick = onClick
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             // Header Row: File icon, name, status badge
