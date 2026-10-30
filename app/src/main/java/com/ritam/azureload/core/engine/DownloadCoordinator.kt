@@ -29,7 +29,9 @@ class DownloadCoordinator(
     private val tag = "DownloadCoordinator"
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val activeJobs = ConcurrentHashMap<Long, Job>()
+    private val activeRunners = ConcurrentHashMap<Long, DownloadJobRunner>()
     private val lastServiceUpdate = ConcurrentHashMap<Long, Long>()
+    private val lastTotalHistorySample = java.util.concurrent.atomic.AtomicLong(0L)
 
     private val _speeds = MutableStateFlow<Map<Long, Long>>(emptyMap())
     val speeds: StateFlow<Map<Long, Long>> = _speeds.asStateFlow()
@@ -125,11 +127,15 @@ class DownloadCoordinator(
                         val nextHistory = (prevHistory + speed).takeLast(30)
                         _speedHistory.value = _speedHistory.value.toMutableMap().apply { put(id, nextHistory) }
 
-                        // Record total aggregate speed history (keep last 30 samples)
-                        val aggregateSpeed = updatedSpeeds.values.sum()
-                        _totalSpeedHistory.value = (_totalSpeedHistory.value + aggregateSpeed).takeLast(30)
-
+                        // Record total aggregate speed history (throttled to at most once per 750ms)
                         val now = System.currentTimeMillis()
+                        val lastSample = lastTotalHistorySample.get()
+                        if (now - lastSample >= 750L) {
+                            lastTotalHistorySample.set(now)
+                            val aggregateSpeed = updatedSpeeds.values.sum()
+                            _totalSpeedHistory.value = (_totalSpeedHistory.value + aggregateSpeed).takeLast(30)
+                        }
+
                         val lastUpdate = lastServiceUpdate[id] ?: 0L
                         if (now - lastUpdate >= 750L) {
                             lastServiceUpdate[id] = now
@@ -137,6 +143,7 @@ class DownloadCoordinator(
                         }
                     }
                 )
+                activeRunners[downloadId] = runner
                 runner.run()
             } catch (ce: CancellationException) {
                 Log.i(tag, "Job for download $downloadId cancelled")
@@ -144,6 +151,7 @@ class DownloadCoordinator(
                 Log.e(tag, "Error running download $downloadId", e)
             } finally {
                 activeJobs.remove(downloadId)
+                activeRunners.remove(downloadId)
                 lastServiceUpdate.remove(downloadId)
                 val updatedSpeeds = _speeds.value.toMutableMap().apply { remove(downloadId) }
                 _speeds.value = updatedSpeeds
@@ -179,12 +187,10 @@ class DownloadCoordinator(
     }
 
     fun pauseDownload(downloadId: Long) {
-        val job = activeJobs[downloadId]
-        if (job != null) {
-            job.cancel()
-            activeJobs.remove(downloadId)
-            lastServiceUpdate.remove(downloadId)
-        }
+        val job = activeJobs.remove(downloadId)
+        activeRunners.remove(downloadId)
+        lastServiceUpdate.remove(downloadId)
+        job?.cancel()
         scope.launch {
             repository.updateDownloadStatus(downloadId, DownloadStatus.PAUSED)
             _speeds.value = _speeds.value.toMutableMap().apply { remove(downloadId) }
@@ -219,16 +225,19 @@ class DownloadCoordinator(
     }
 
     fun pauseAll() {
-        for ((id, job) in activeJobs) {
-            job.cancel()
-            scope.launch {
-                repository.updateDownloadStatus(id, DownloadStatus.PAUSED)
-            }
-        }
+        val jobsToCancel = activeJobs.values.toList()
         activeJobs.clear()
+        activeRunners.clear()
         lastServiceUpdate.clear()
         _speeds.value = emptyMap()
-        DownloadForegroundService.stopService(context)
+        jobsToCancel.forEach { it.cancel() }
+        scope.launch {
+            val pending = repository.getActiveOrPendingDownloads()
+            for (item in pending) {
+                repository.updateDownloadStatus(item.id, DownloadStatus.PAUSED)
+            }
+            DownloadForegroundService.stopService(context)
+        }
     }
 
     fun resumeAll() {
@@ -245,6 +254,7 @@ class DownloadCoordinator(
     }
 
     fun updateSpeedLimit(downloadId: Long, limitBytesPerSec: Long) {
+        activeRunners[downloadId]?.setSpeedLimit(limitBytesPerSec)
         scope.launch {
             repository.updateSpeedLimit(downloadId, limitBytesPerSec)
         }

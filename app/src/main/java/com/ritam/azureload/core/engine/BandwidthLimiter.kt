@@ -3,16 +3,17 @@ package com.ritam.azureload.core.engine
 import kotlinx.coroutines.delay
 
 /**
- * Thread-safe, non-blocking coroutine rate limiter.
+ * Thread-safe, non-blocking coroutine rate limiter using the token bucket algorithm.
  * Can be shared across multiple concurrent chunk downloaders to throttle
- * total aggregated transfer rate to the target bytes per second.
+ * total aggregated transfer rate to the target bytes per second without jitter,
+ * thread starvation, or window reset bursts.
  */
 class BandwidthLimiter(
     private val limitBytesPerSecProvider: () -> Long
 ) {
     private val lock = Any()
-    private var windowStartMs = System.currentTimeMillis()
-    private var bytesInCurrentWindow = 0L
+    private var lastRefillTime = System.currentTimeMillis()
+    private var availableTokens = 0L
 
     suspend fun throttle(bytesCount: Int) {
         if (bytesCount <= 0) return
@@ -22,19 +23,22 @@ class BandwidthLimiter(
         val delayMs: Long
         synchronized(lock) {
             val now = System.currentTimeMillis()
-            val windowElapsed = now - windowStartMs
-            if (windowElapsed >= 1000L) {
-                windowStartMs = now
-                bytesInCurrentWindow = 0L
-            }
+            val elapsed = (now - lastRefillTime).coerceAtLeast(0L)
+            lastRefillTime = now
+            val maxCapacity = limit.coerceAtLeast(64L * 1024L)
 
-            bytesInCurrentWindow += bytesCount
-            val expectedDurationMs = (bytesInCurrentWindow * 1000L) / limit
-            val currentElapsed = System.currentTimeMillis() - windowStartMs
-            delayMs = if (expectedDurationMs > currentElapsed) {
-                (expectedDurationMs - currentElapsed).coerceAtMost(1500L)
+            // Refill tokens based on elapsed time
+            availableTokens = (availableTokens + (elapsed * limit) / 1000L).coerceAtMost(maxCapacity)
+
+            if (availableTokens >= bytesCount) {
+                availableTokens -= bytesCount
+                delayMs = 0L
             } else {
-                0L
+                val deficit = bytesCount - availableTokens
+                availableTokens = 0L
+                delayMs = (deficit * 1000L) / limit
+                // Advance virtual refill point so next arrival accounts for this delay
+                lastRefillTime += delayMs
             }
         }
 

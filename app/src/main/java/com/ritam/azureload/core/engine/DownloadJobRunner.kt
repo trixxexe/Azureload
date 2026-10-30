@@ -49,10 +49,11 @@ class DownloadJobRunner(
     private val currentSpeed = AtomicLong(0L)
     @Volatile
     private var currentDownloadRef: DownloadItem? = null
+    private val dynamicSpeedLimit = AtomicLong(0L)
 
     private val bandwidthLimiter = BandwidthLimiter {
         val globalLimit = settingsManager?.getGlobalSpeedLimit() ?: 0L
-        val downloadLimit = (currentDownloadRef?.speedLimitBytesPerSec ?: 0L).coerceAtLeast(0L)
+        val downloadLimit = dynamicSpeedLimit.get()
         when {
             globalLimit > 0 && downloadLimit > 0 -> min(globalLimit, downloadLimit)
             globalLimit > 0 -> globalLimit
@@ -61,9 +62,14 @@ class DownloadJobRunner(
         }
     }
 
+    fun setSpeedLimit(speedLimit: Long) {
+        dynamicSpeedLimit.set(speedLimit.coerceAtLeast(0L))
+    }
+
     suspend fun run() = withContext(Dispatchers.IO) {
         var currentDownload = repository.getDownloadById(downloadId) ?: return@withContext
         currentDownloadRef = currentDownload
+        dynamicSpeedLimit.set(currentDownload.speedLimitBytesPerSec)
         try {
             repository.updateDownloadStatus(downloadId, DownloadStatus.DETECTING)
 

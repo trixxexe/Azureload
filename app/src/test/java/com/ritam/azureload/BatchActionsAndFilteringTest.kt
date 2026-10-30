@@ -120,4 +120,63 @@ class BatchActionsAndFilteringTest {
         val updated = repository.getDownloadById(id)
         assertEquals(2L * 1024L * 1024L, updated?.speedLimitBytesPerSec)
     }
+
+    @Test
+    fun testSearchFilteringByFilenameMimeAndStatus() {
+        val list = listOf(
+            DownloadItem(id = 1, url = "https://example.com/movie.mp4", destinationPath = "", stagingPath = "", fileName = "movie.mp4", mimeType = "video/mp4", status = DownloadStatus.DOWNLOADING),
+            DownloadItem(id = 2, url = "https://example.com/document.pdf", destinationPath = "", stagingPath = "", fileName = "document.pdf", mimeType = "application/pdf", status = DownloadStatus.COMPLETED),
+            DownloadItem(id = 3, url = "https://example.com/data.json", destinationPath = "", stagingPath = "", fileName = "data.json", mimeType = "application/json", status = DownloadStatus.FAILED),
+            DownloadItem(id = 4, url = "https://example.com/music.mp3", destinationPath = "", stagingPath = "", fileName = "song.mp3", mimeType = "audio/mpeg", status = DownloadStatus.PAUSED)
+        )
+
+        fun search(query: String): List<DownloadItem> {
+            val q = query.trim()
+            if (q.isBlank()) return list
+            return list.filter {
+                it.fileName.contains(q, ignoreCase = true) ||
+                it.url.contains(q, ignoreCase = true) ||
+                (it.mimeType?.contains(q, ignoreCase = true) == true) ||
+                it.status.name.contains(q, ignoreCase = true)
+            }
+        }
+
+        // Search by MIME
+        assertEquals(listOf(2L), search("application/pdf").map { it.id })
+        assertEquals(listOf(1L), search("video").map { it.id })
+
+        // Search by Status
+        assertEquals(listOf(1L), search("DOWNLOADING").map { it.id })
+        assertEquals(listOf(3L), search("failed").map { it.id })
+        assertEquals(listOf(4L), search("paused").map { it.id })
+
+        // Search by Filename
+        assertEquals(listOf(4L), search("song").map { it.id })
+    }
+
+    @Test
+    fun testPauseAllPendingDownloadsTransition() = runBlocking {
+        val fakeDownloadDao = FakeDownloadDao()
+        val fakeChunkDao = FakeChunkDao()
+        val repository = DownloadRepository(fakeDownloadDao, fakeChunkDao)
+
+        val id1 = repository.insertDownload(DownloadItem(url = "https://example.com/1", destinationPath = "", stagingPath = "", fileName = "1.bin", status = DownloadStatus.DOWNLOADING))
+        val id2 = repository.insertDownload(DownloadItem(url = "https://example.com/2", destinationPath = "", stagingPath = "", fileName = "2.bin", status = DownloadStatus.QUEUED))
+        val id3 = repository.insertDownload(DownloadItem(url = "https://example.com/3", destinationPath = "", stagingPath = "", fileName = "3.bin", status = DownloadStatus.DETECTING))
+
+        // When coordinator pauses all, all active or pending must transition to PAUSED
+        val pending = repository.getActiveOrPendingDownloads()
+        assertEquals(3, pending.size)
+        for (item in pending) {
+            repository.updateDownloadStatus(item.id, DownloadStatus.PAUSED)
+        }
+
+        assertEquals(DownloadStatus.PAUSED, repository.getDownloadById(id1)?.status)
+        assertEquals(DownloadStatus.PAUSED, repository.getDownloadById(id2)?.status)
+        assertEquals(DownloadStatus.PAUSED, repository.getDownloadById(id3)?.status)
+
+        // Verifies no queued jobs remain to be erroneously picked up
+        val remainingPending = repository.getActiveOrPendingDownloads()
+        assertEquals(0, remainingPending.size)
+    }
 }

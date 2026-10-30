@@ -70,6 +70,9 @@ fun DetailScreen(
     var isCalculatingChecksum by remember { mutableStateOf(false) }
     var hashInputToCompare by remember { mutableStateOf("") }
 
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var deleteFileOnDisk by remember { mutableStateOf(false) }
+
     var currentLimitBytes by remember(download?.speedLimitBytesPerSec) {
         mutableStateOf(download?.speedLimitBytesPerSec ?: 0L)
     }
@@ -118,15 +121,18 @@ fun DetailScreen(
         )
         val remainingBytes = (totalBytes - downloadedBytes).coerceAtLeast(0)
 
-        val etaText = if (speed > 0 && remainingBytes > 0) {
-            val seconds = remainingBytes / speed
-            val mins = seconds / 60
-            val secs = seconds % 60
-            if (mins > 60) "${mins / 60}h ${mins % 60}m" else "${mins}m ${secs}s"
-        } else if (download.status == DownloadStatus.COMPLETED) {
-            "Finished"
-        } else {
-            "Calculating..."
+        val etaText = when {
+            download.status == DownloadStatus.COMPLETED -> "Finished"
+            download.status == DownloadStatus.PAUSED -> "Paused"
+            download.status == DownloadStatus.FAILED -> "Failed"
+            download.status == DownloadStatus.QUEUED -> "Queued"
+            speed > 0 && remainingBytes > 0 -> {
+                val seconds = remainingBytes / speed
+                val mins = seconds / 60
+                val secs = seconds % 60
+                if (mins > 60) "${mins / 60}h ${mins % 60}m" else "${mins}m ${secs}s"
+            }
+            else -> "Calculating..."
         }
 
         val isParallel = download.isParallelTransfer
@@ -385,7 +391,7 @@ fun DetailScreen(
                             }
 
                             OutlinedButton(
-                                onClick = { onCancel(download.id); onBack() },
+                                onClick = { showDeleteConfirmDialog = true },
                                 modifier = Modifier.weight(if (download.status == DownloadStatus.COMPLETED) 0.8f else 1f),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = AzureError)
                             ) {
@@ -580,11 +586,9 @@ fun DetailScreen(
 
                         Spacer(modifier = Modifier.height(10.dp))
 
-                        // Target file status on disk
+                        // Target file status on disk (only computed on fully completed files)
                         val targetFile = if (download.status == DownloadStatus.COMPLETED && download.destinationPath.isNotBlank()) {
                             File(download.destinationPath)
-                        } else if (download.stagingPath.isNotBlank()) {
-                            File(download.stagingPath)
                         } else null
 
                         val fileExists = targetFile?.exists() == true
@@ -719,23 +723,41 @@ fun DetailScreen(
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth(),
                                     trailingIcon = {
-                                        if (hashInputToCompare.isNotBlank()) {
-                                            val cleanInput = hashInputToCompare.trim()
-                                            val matchesSha = res.sha256.equals(cleanInput, ignoreCase = true)
-                                            val matchesMd5 = res.md5.equals(cleanInput, ignoreCase = true)
-                                            val matched = matchesSha || matchesMd5
-                                            Icon(
-                                                imageVector = if (matched) Icons.Default.CheckCircle else Icons.Default.Cancel,
-                                                contentDescription = null,
-                                                tint = if (matched) AzureSuccess else AzureError
-                                            )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(
+                                                onClick = {
+                                                    val clip = (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
+                                                        .primaryClip?.getItemAt(0)?.text?.toString()?.trim()
+                                                    if (!clip.isNullOrBlank()) {
+                                                        hashInputToCompare = clip
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.ContentPaste, contentDescription = "Paste from clipboard", modifier = Modifier.size(18.dp))
+                                            }
+                                            if (hashInputToCompare.isNotBlank()) {
+                                                val cleanInput = hashInputToCompare.trim()
+                                                val matchesSha = res.sha256.equals(cleanInput, ignoreCase = true)
+                                                val matchesMd5 = res.md5.equals(cleanInput, ignoreCase = true)
+                                                val matched = matchesSha || matchesMd5
+                                                Icon(
+                                                    imageVector = if (matched) Icons.Default.CheckCircle else Icons.Default.Cancel,
+                                                    contentDescription = null,
+                                                    tint = if (matched) AzureSuccess else AzureError,
+                                                    modifier = Modifier.padding(end = 6.dp).size(18.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 )
                             }
                         } else {
                             Text(
-                                text = "File is not yet available on local storage to compute checksums.",
+                                text = if (download.status == DownloadStatus.DOWNLOADING || download.status == DownloadStatus.QUEUED) {
+                                    "Checksum verification will be available once the download is complete."
+                                } else {
+                                    "Completed file is not available on device storage to compute checksums."
+                                },
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -797,6 +819,65 @@ fun DetailScreen(
                     }
                 }
             }
+        }
+
+        if (showDeleteConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirmDialog = false },
+                icon = {
+                    Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = AzureError)
+                },
+                title = {
+                    Text(if (download.status == DownloadStatus.COMPLETED) "Delete Download?" else "Cancel Download?")
+                },
+                text = {
+                    Column {
+                        Text(
+                            if (download.status == DownloadStatus.COMPLETED) {
+                                "Remove \"${download.fileName}\" from your download list?"
+                            } else {
+                                "Cancel active transfer \"${download.fileName}\"?"
+                            }
+                        )
+                        if (download.status == DownloadStatus.COMPLETED && download.destinationPath.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { deleteFileOnDisk = !deleteFileOnDisk }
+                            ) {
+                                Checkbox(
+                                    checked = deleteFileOnDisk,
+                                    onCheckedChange = { deleteFileOnDisk = it }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Also delete file from device storage", fontSize = 13.sp)
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showDeleteConfirmDialog = false
+                            if (deleteFileOnDisk && download.status == DownloadStatus.COMPLETED && download.destinationPath.isNotBlank()) {
+                                try { File(download.destinationPath).delete() } catch (_: Exception) {}
+                            }
+                            onCancel(download.id)
+                            onBack()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = AzureError)
+                    ) {
+                        Text(if (download.status == DownloadStatus.COMPLETED) "Delete" else "Cancel Download")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                        Text("Dismiss")
+                    }
+                }
+            )
         }
     }
 }

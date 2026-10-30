@@ -1,6 +1,7 @@
 package com.ritam.azureload
 
 import android.Manifest
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -305,9 +306,10 @@ class MainActivity : ComponentActivity() {
                 "${context.packageName}.fileprovider",
                 file
             )
-            val type = mimeType ?: getMimeType(file)
+            val type = resolveMimeType(file, mimeType)
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, type)
+                clipData = ClipData.newRawUri(file.name, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
@@ -329,10 +331,11 @@ class MainActivity : ComponentActivity() {
                 "${context.packageName}.fileprovider",
                 file
             )
-            val type = mimeType ?: getMimeType(file)
+            val type = resolveMimeType(file, mimeType)
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                this.type = type
                 putExtra(Intent.EXTRA_STREAM, uri)
-                setDataAndType(uri, type)
+                clipData = ClipData.newRawUri(file.name, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             val chooser = Intent.createChooser(shareIntent, "Share ${file.name}").apply {
@@ -344,8 +347,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun getMimeType(file: File): String {
+    private fun resolveMimeType(file: File, mimeType: String?): String {
+        val cleanMime = mimeType?.substringBefore(';')?.trim()
+        if (!cleanMime.isNullOrBlank() && cleanMime != "application/octet-stream" && cleanMime != "*/*") {
+            return cleanMime
+        }
         val ext = file.extension.lowercase()
-        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+            ?: if (!cleanMime.isNullOrBlank()) cleanMime else "*/*"
     }
 }

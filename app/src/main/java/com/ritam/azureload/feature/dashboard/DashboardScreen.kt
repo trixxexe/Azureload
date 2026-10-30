@@ -110,8 +110,13 @@ fun DashboardScreen(
             }
             .filter { item ->
                 if (searchQuery.isBlank()) true
-                else item.fileName.contains(searchQuery.trim(), ignoreCase = true) ||
-                        item.url.contains(searchQuery.trim(), ignoreCase = true)
+                else {
+                    val q = searchQuery.trim()
+                    item.fileName.contains(q, ignoreCase = true) ||
+                        item.url.contains(q, ignoreCase = true) ||
+                        (item.mimeType?.contains(q, ignoreCase = true) == true) ||
+                        item.status.name.contains(q, ignoreCase = true)
+                }
             }
             .toList()
             .let { list ->
@@ -276,7 +281,7 @@ fun DashboardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp),
-                placeholder = { Text("Search downloads by name or URL...", fontSize = 13.sp) },
+                placeholder = { Text("Search by name, status, MIME, or URL...", fontSize = 13.sp) },
                 leadingIcon = {
                     Icon(Icons.Default.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 },
@@ -791,14 +796,14 @@ fun DownloadCard(
 fun formatBytes(bytes: Long): String {
     if (bytes < 1024) return "$bytes B"
     val kb = bytes / 1024.0
-    if (kb < 1024) return String.format("%.1f KB", kb)
+    if (kb < 1024) return String.format(java.util.Locale.US, "%.1f KB", kb)
     val mb = kb / 1024.0
-    if (mb < 1024) return String.format("%.1f MB", mb)
+    if (mb < 1024) return String.format(java.util.Locale.US, "%.1f MB", mb)
     val gb = mb / 1024.0
-    return String.format("%.2f GB", gb)
+    return String.format(java.util.Locale.US, "%.2f GB", gb)
 }
 
 fun formatSpeed(bytesPerSec: Long): String {
     val mb = bytesPerSec / (1024.0 * 1024.0)
-    return if (mb >= 0.1) String.format("%.2f MB/s", mb) else "${bytesPerSec / 1024} KB/s"
+    return if (mb >= 0.1) String.format(java.util.Locale.US, "%.2f MB/s", mb) else "${bytesPerSec / 1024} KB/s"
 }
