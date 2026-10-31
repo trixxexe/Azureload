@@ -94,12 +94,12 @@ fun BrowserScreen(
                         .clip(addressShape)
                         .background(
                             brush = Brush.verticalGradient(
-                                listOf(Color(0x28FFFFFF), Color(0x0E1A293E))
+                                listOf(Color(0x25FFFFFF), Color(0x0AFFFFFF))
                             )
                         )
                         .border(
                             1.dp,
-                            Brush.verticalGradient(listOf(Color(0x55FFFFFF), Color(0x12FFFFFF))),
+                            Brush.verticalGradient(listOf(Color(0x60FFFFFF), Color(0x12FFFFFF))),
                             addressShape
                         )
                         .padding(horizontal = 6.dp, vertical = 4.dp),
@@ -185,12 +185,12 @@ fun BrowserScreen(
                         .clip(dockShape)
                         .background(
                             brush = Brush.verticalGradient(
-                                listOf(Color(0x3517223A), Color(0x250C1322))
+                                listOf(Color(0x38182236), Color(0x220E1524))
                             )
                         )
                         .border(
                             1.dp,
-                            Brush.verticalGradient(listOf(Color(0x60FFFFFF), Color(0x15FFFFFF))),
+                            Brush.verticalGradient(listOf(Color(0x65FFFFFF), Color(0x14FFFFFF))),
                             dockShape
                         )
                         .padding(horizontal = 14.dp, vertical = 8.dp),

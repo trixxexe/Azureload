@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -31,11 +32,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ritam.azureload.core.model.DownloadItem
 import com.ritam.azureload.core.model.DownloadStatus
 import com.ritam.azureload.core.network.CapabilityDetector
+import com.ritam.azureload.ui.components.DockTab
+import com.ritam.azureload.ui.components.FloatingLiquidGlassDock
 import com.ritam.azureload.feature.add.AddDownloadScreen
 import com.ritam.azureload.feature.browser.BrowserScreen
 import com.ritam.azureload.feature.dashboard.DashboardScreen
@@ -116,144 +120,201 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    NavHost(
-                        navController = navController,
-                        startDestination = Screen.Dashboard.route
-                    ) {
-                        composable(Screen.Dashboard.route) {
-                            DashboardScreen(
-                                downloads = downloads,
-                                speeds = speeds,
-                                speedHistories = speedHistories,
-                                totalSpeedHistory = totalSpeedHistory,
-                                onNavigateToAdd = { navController.navigate(Screen.Add.createRoute()) },
-                                onNavigateToBrowser = { navController.navigate(Screen.Browser.createRoute()) },
-                                onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
-                                onNavigateToDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
-                                onNavigateToDetail = { id -> navController.navigate(Screen.Detail.createRoute(id)) },
-                                onPause = { coordinator.pauseDownload(it) },
-                                onResume = { coordinator.resumeDownload(it) },
-                                onRetry = { coordinator.retryDownload(it) },
-                                onCancel = { coordinator.cancelDownload(it) },
-                                onDelete = { coordinator.cancelDownload(it) },
-                                onPauseAll = { coordinator.pauseAll() },
-                                onResumeAll = { coordinator.resumeAll() },
-                                onClearCompleted = { deleteFiles -> coordinator.clearCompleted(deleteFiles) },
-                                onOpenFile = { openDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) },
-                                onShareFile = { shareDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) }
-                            )
-                        }
+                    val navBackStackEntry by navController.currentBackStackEntryAsState()
+                    val currentRoute = navBackStackEntry?.destination?.route
 
-                        composable(
-                            route = Screen.Add.route,
-                            arguments = listOf(
-                                navArgument("url") { type = NavType.StringType; nullable = true; defaultValue = null },
-                                navArgument("cookie") { type = NavType.StringType; nullable = true; defaultValue = null },
-                                navArgument("userAgent") { type = NavType.StringType; nullable = true; defaultValue = null },
-                                navArgument("fileName") { type = NavType.StringType; nullable = true; defaultValue = null }
-                            )
-                        ) { backStackEntry ->
-                            fun decodeSafely(s: String?): String? = s?.let {
-                                try { URLDecoder.decode(it, "UTF-8") } catch (_: Exception) { it }
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        NavHost(
+                            navController = navController,
+                            startDestination = Screen.Dashboard.route,
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            composable(Screen.Dashboard.route) {
+                                DashboardScreen(
+                                    downloads = downloads,
+                                    speeds = speeds,
+                                    speedHistories = speedHistories,
+                                    totalSpeedHistory = totalSpeedHistory,
+                                    onNavigateToAdd = { navController.navigate(Screen.Add.createRoute()) },
+                                    onNavigateToBrowser = { navController.navigate(Screen.Browser.createRoute()) },
+                                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                                    onNavigateToDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
+                                    onNavigateToDetail = { id -> navController.navigate(Screen.Detail.createRoute(id)) },
+                                    onPause = { coordinator.pauseDownload(it) },
+                                    onResume = { coordinator.resumeDownload(it) },
+                                    onRetry = { coordinator.retryDownload(it) },
+                                    onCancel = { coordinator.cancelDownload(it) },
+                                    onDelete = { coordinator.cancelDownload(it) },
+                                    onPauseAll = { coordinator.pauseAll() },
+                                    onResumeAll = { coordinator.resumeAll() },
+                                    onClearCompleted = { deleteFiles -> coordinator.clearCompleted(deleteFiles) },
+                                    onOpenFile = { openDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) },
+                                    onShareFile = { shareDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) }
+                                )
                             }
 
-                            val initialUrlArg = decodeSafely(backStackEntry.arguments?.getString("url"))
-                            val initialCookie = decodeSafely(backStackEntry.arguments?.getString("cookie"))
-                            val initialUserAgent = decodeSafely(backStackEntry.arguments?.getString("userAgent"))
-                            val initialFileName = decodeSafely(backStackEntry.arguments?.getString("fileName"))
+                            composable(
+                                route = Screen.Add.route,
+                                arguments = listOf(
+                                    navArgument("url") { type = NavType.StringType; nullable = true; defaultValue = null },
+                                    navArgument("cookie") { type = NavType.StringType; nullable = true; defaultValue = null },
+                                    navArgument("userAgent") { type = NavType.StringType; nullable = true; defaultValue = null },
+                                    navArgument("fileName") { type = NavType.StringType; nullable = true; defaultValue = null }
+                                )
+                            ) { backStackEntry ->
+                                fun decodeSafely(s: String?): String? = s?.let {
+                                    try { URLDecoder.decode(it, "UTF-8") } catch (_: Exception) { it }
+                                }
 
-                            AddDownloadScreen(
-                                initialUrl = initialUrlArg,
-                                initialCookie = initialCookie,
-                                initialUserAgent = initialUserAgent,
-                                initialFileName = initialFileName,
-                                defaultConcurrency = defaultConcurrency,
-                                onBack = { navController.popBackStack() },
-                                onSubmitDownload = { url, fileName, concurrency, headers, sha256, speedLimit ->
-                                    coroutineScope.launch {
-                                        val newDownload = DownloadItem(
-                                            url = url,
-                                            fileName = fileName,
-                                            concurrency = concurrency,
-                                            customHeaders = headers,
-                                            expectedSha256 = sha256,
-                                            destinationPath = "",
-                                            stagingPath = "",
-                                            speedLimitBytesPerSec = speedLimit,
-                                            status = DownloadStatus.QUEUED
-                                        )
-                                        val id = repository.insertDownload(newDownload)
-                                        coordinator.startDownload(id)
+                                val initialUrlArg = decodeSafely(backStackEntry.arguments?.getString("url"))
+                                val initialCookie = decodeSafely(backStackEntry.arguments?.getString("cookie"))
+                                val initialUserAgent = decodeSafely(backStackEntry.arguments?.getString("userAgent"))
+                                val initialFileName = decodeSafely(backStackEntry.arguments?.getString("fileName"))
+
+                                AddDownloadScreen(
+                                    initialUrl = initialUrlArg,
+                                    initialCookie = initialCookie,
+                                    initialUserAgent = initialUserAgent,
+                                    initialFileName = initialFileName,
+                                    defaultConcurrency = defaultConcurrency,
+                                    onBack = { navController.popBackStack() },
+                                    onSubmitDownload = { url, fileName, concurrency, headers, sha256, speedLimit ->
+                                        coroutineScope.launch {
+                                            val newDownload = DownloadItem(
+                                                url = url,
+                                                fileName = fileName,
+                                                concurrency = concurrency,
+                                                customHeaders = headers,
+                                                expectedSha256 = sha256,
+                                                destinationPath = "",
+                                                stagingPath = "",
+                                                speedLimitBytesPerSec = speedLimit,
+                                                status = DownloadStatus.QUEUED
+                                            )
+                                            val id = repository.insertDownload(newDownload)
+                                            coordinator.startDownload(id)
+                                        }
                                     }
-                                }
-                            )
-                        }
-
-                        composable(
-                            route = Screen.Browser.route,
-                            arguments = listOf(navArgument("url") {
-                                type = NavType.StringType
-                                nullable = true
-                                defaultValue = null
-                            })
-                        ) { backStackEntry ->
-                            val rawUrl = backStackEntry.arguments?.getString("url")
-                            val decodedUrl = rawUrl?.let {
-                                try { URLDecoder.decode(it, "UTF-8") } catch (_: Exception) { it }
+                                )
                             }
 
-                            BrowserScreen(
-                                initialUrl = decodedUrl,
-                                onBack = { navController.popBackStack() },
-                                onInterceptDownload = { downloadUrl, cookie, userAgent, contentDisposition ->
-                                    val suggestedName = CapabilityDetector.extractFileName(contentDisposition, downloadUrl)
-                                    navController.navigate(Screen.Add.createRoute(
-                                        url = downloadUrl,
-                                        cookie = cookie,
-                                        userAgent = userAgent,
-                                        fileName = suggestedName
-                                    ))
+                            composable(
+                                route = Screen.Browser.route,
+                                arguments = listOf(navArgument("url") {
+                                    type = NavType.StringType
+                                    nullable = true
+                                    defaultValue = null
+                                })
+                            ) { backStackEntry ->
+                                val rawUrl = backStackEntry.arguments?.getString("url")
+                                val decodedUrl = rawUrl?.let {
+                                    try { URLDecoder.decode(it, "UTF-8") } catch (_: Exception) { it }
                                 }
-                            )
+
+                                BrowserScreen(
+                                    initialUrl = decodedUrl,
+                                    onBack = { navController.popBackStack() },
+                                    onInterceptDownload = { downloadUrl, cookie, userAgent, contentDisposition ->
+                                        val suggestedName = CapabilityDetector.extractFileName(contentDisposition, downloadUrl)
+                                        navController.navigate(Screen.Add.createRoute(
+                                            url = downloadUrl,
+                                            cookie = cookie,
+                                            userAgent = userAgent,
+                                            fileName = suggestedName
+                                        ))
+                                    }
+                                )
+                            }
+
+                            composable(
+                                route = Screen.Detail.route,
+                                arguments = listOf(navArgument("id") { type = NavType.LongType })
+                            ) { backStackEntry ->
+                                val id = backStackEntry.arguments?.getLong("id") ?: -1L
+                                val download = downloads.firstOrNull { it.id == id }
+                                val chunks by repository.observeChunksForDownload(id).collectAsStateWithLifecycle(initialValue = emptyList())
+                                val currentSpeed = speeds[id] ?: 0L
+
+                                DetailScreen(
+                                    download = download,
+                                    chunks = chunks,
+                                    speed = currentSpeed,
+                                    speedHistory = speedHistories[id] ?: emptyList(),
+                                    onBack = { navController.popBackStack() },
+                                    onPause = { coordinator.pauseDownload(it) },
+                                    onResume = { coordinator.resumeDownload(it) },
+                                    onRetry = { coordinator.retryDownload(it) },
+                                    onCancel = { coordinator.cancelDownload(it) },
+                                    onOpenFile = { openDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) },
+                                    onShareFile = { shareDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) },
+                                    onUpdateSpeedLimit = { dlId, limit -> coordinator.updateSpeedLimit(dlId, limit) }
+                                )
+                            }
+
+                            composable(Screen.Settings.route) {
+                                SettingsScreen(
+                                    settingsManager = settingsManager,
+                                    onBack = { navController.popBackStack() }
+                                )
+                            }
+
+                            composable(Screen.Diagnostics.route) {
+                                DiagnosticsScreen(
+                                    stagingDir = stagingManager.getStagingDirectory(),
+                                    activeJobsCount = coordinator.getActiveJobCount(),
+                                    onBack = { navController.popBackStack() }
+                                )
+                            }
                         }
 
-                        composable(
-                            route = Screen.Detail.route,
-                            arguments = listOf(navArgument("id") { type = NavType.LongType })
-                        ) { backStackEntry ->
-                            val id = backStackEntry.arguments?.getLong("id") ?: -1L
-                            val download = downloads.firstOrNull { it.id == id }
-                            val chunks by repository.observeChunksForDownload(id).collectAsStateWithLifecycle(initialValue = emptyList())
-                            val currentSpeed = speeds[id] ?: 0L
+                        // Floating iOS Liquid Glass Dock
+                        val isDockVisible = currentRoute == Screen.Dashboard.route ||
+                                currentRoute == Screen.Settings.route ||
+                                currentRoute == Screen.Diagnostics.route ||
+                                currentRoute?.startsWith("add") == true
 
-                            DetailScreen(
-                                download = download,
-                                chunks = chunks,
-                                speed = currentSpeed,
-                                speedHistory = speedHistories[id] ?: emptyList(),
-                                onBack = { navController.popBackStack() },
-                                onPause = { coordinator.pauseDownload(it) },
-                                onResume = { coordinator.resumeDownload(it) },
-                                onRetry = { coordinator.retryDownload(it) },
-                                onCancel = { coordinator.cancelDownload(it) },
-                                onOpenFile = { openDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) },
-                                onShareFile = { shareDownloadedFile(this@MainActivity, it.destinationPath, it.mimeType) },
-                                onUpdateSpeedLimit = { dlId, limit -> coordinator.updateSpeedLimit(dlId, limit) }
-                            )
-                        }
+                        if (isDockVisible) {
+                            val activeTab = when {
+                                currentRoute == Screen.Dashboard.route -> DockTab.TRANSFERS
+                                currentRoute == Screen.Settings.route -> DockTab.SETTINGS
+                                currentRoute == Screen.Diagnostics.route -> DockTab.HEALTH
+                                currentRoute?.startsWith("add") == true -> DockTab.ADD
+                                else -> DockTab.TRANSFERS
+                            }
 
-                        composable(Screen.Settings.route) {
-                            SettingsScreen(
-                                settingsManager = settingsManager,
-                                onBack = { navController.popBackStack() }
-                            )
-                        }
-
-                        composable(Screen.Diagnostics.route) {
-                            DiagnosticsScreen(
-                                stagingDir = stagingManager.getStagingDirectory(),
-                                activeJobsCount = coordinator.getActiveJobCount(),
-                                onBack = { navController.popBackStack() }
+                            FloatingLiquidGlassDock(
+                                activeTab = activeTab,
+                                onSelectTab = { tab ->
+                                    when (tab) {
+                                        DockTab.TRANSFERS -> {
+                                            if (currentRoute != Screen.Dashboard.route) {
+                                                navController.navigate(Screen.Dashboard.route) {
+                                                    popUpTo(Screen.Dashboard.route) { inclusive = false }
+                                                    launchSingleTop = true
+                                                }
+                                            }
+                                        }
+                                        DockTab.BROWSER -> {
+                                            navController.navigate(Screen.Browser.createRoute())
+                                        }
+                                        DockTab.ADD -> {
+                                            if (currentRoute?.startsWith("add") != true) {
+                                                navController.navigate(Screen.Add.createRoute())
+                                            }
+                                        }
+                                        DockTab.HEALTH -> {
+                                            if (currentRoute != Screen.Diagnostics.route) {
+                                                navController.navigate(Screen.Diagnostics.route)
+                                            }
+                                        }
+                                        DockTab.SETTINGS -> {
+                                            if (currentRoute != Screen.Settings.route) {
+                                                navController.navigate(Screen.Settings.route)
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.align(Alignment.BottomCenter)
                             )
                         }
                     }

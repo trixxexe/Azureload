@@ -58,6 +58,9 @@ val EmeraldSuccess = Color(0xFF10B981)
 
 val CoralDanger = Color(0xFFFF453A)
 val SolarWarning = Color(0xFFFF9F0A)
+val SolarGold = Color(0xFFFFD166)
+val LuminousIndigo = Color(0xFF6366F1)
+val ObsidianBlack = Color(0xFF04060A)
 
 // ── Neon Aliases ────────────────────────────────────────────────────────────
 val NeonCyan = ElectricCyan
@@ -66,14 +69,17 @@ val NeonPurple = ElectricPurple
 val NeonPink = NeonMagenta
 
 // ── Liquid Glass Refraction Materials ───────────────────────────────────────
-val GlassSurface = Color(0x22FFFFFF)
+val GlassSurface = Color(0x20FFFFFF)
 val GlassSurfaceSubtle = Color(0x0EFFFFFF)
 val GlassSurfaceMuted = Color(0x06FFFFFF)
 val GlassSurfaceLuminous = Color(0x32FFFFFF)
+val GlassSurfaceUltra = Color(0x18FFFFFF)
 
-val GlassBorder = Color(0x52FFFFFF)
-val GlassBorderSubtle = Color(0x18FFFFFF)
+val GlassBorder = Color(0x55FFFFFF)
+val GlassBorderSubtle = Color(0x16FFFFFF)
 val GlassBorderActive = Color(0x9900F5FF)
+val GlassSpecularTop = Color(0x65FFFFFF)
+val GlassSpecularBottom = Color(0x10FFFFFF)
 
 val TextPrimary = Color(0xFFF8FAFC)
 val TextSecondary = Color(0xFF94A3B8)

@@ -130,7 +130,7 @@ fun AddDownloadScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(scrollState)
-                .padding(horizontal = 18.dp, vertical = 8.dp),
+                .padding(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 108.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Source URL Card

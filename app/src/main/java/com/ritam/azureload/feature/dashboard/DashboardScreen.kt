@@ -31,7 +31,6 @@ import com.ritam.azureload.core.model.DownloadItem
 import com.ritam.azureload.core.model.DownloadStatus
 import com.ritam.azureload.core.model.FileCategory
 import com.ritam.azureload.core.model.getFileCategory
-import com.ritam.azureload.core.network.ErrorClassifier
 import com.ritam.azureload.ui.components.*
 import com.ritam.azureload.ui.theme.*
 
@@ -72,7 +71,7 @@ fun DashboardScreen(
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf(FileCategory.ALL) }
     var selectedSort by remember { mutableStateOf(SortOption.DATE_DESC) }
-    var showSortMenu by remember { mutableStateOf(false) }
+    var showActionMenu by remember { mutableStateOf(false) }
     var showClearCompletedDialog by remember { mutableStateOf(false) }
 
     // Counts for tab badges
@@ -140,85 +139,138 @@ fun DashboardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(horizontal = 18.dp, vertical = 10.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // App Logo & Brand Title
+                // Large iOS Title + Total Count Badge
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(38.dp)
-                            .clip(SquircleShape(11.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(ElectricCyan.copy(alpha = 0.28f), VibrantAzure.copy(alpha = 0.12f))
-                                )
-                            )
-                            .border(1.dp, ElectricCyan.copy(alpha = 0.5f), SquircleShape(11.dp)),
-                        contentAlignment = Alignment.Center
+                    Text(
+                        text = "Transfers",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 28.sp,
+                        letterSpacing = (-0.6).sp,
+                        color = TextPrimary
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    LiquidGlassPill(
+                        cornerRadius = 100.dp,
+                        tint = ElectricCyan
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudDownload,
-                            contentDescription = null,
-                            tint = ElectricCyan,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(11.dp))
-                    Column {
                         Text(
-                            text = "Azureload",
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 20.sp,
-                            letterSpacing = (-0.3).sp,
-                            color = TextPrimary
-                        )
-                        Text(
-                            text = "Liquid Multi-Stream",
+                            text = "${downloads.size}",
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
+                            fontWeight = FontWeight.Bold,
                             color = ElectricCyan
                         )
                     }
                 }
 
-                // Floating Action Capsule
-                LiquidGlassPill(
-                    cornerRadius = 100.dp
+                // Header Actions: Live Velocity Chip + Action Menu (•••)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    IconButton(
-                        onClick = onNavigateToBrowser,
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Icon(Icons.Default.Language, contentDescription = "Browser", tint = TextPrimary, modifier = Modifier.size(18.dp))
+                    // Live Velocity Pill when transfers are actively running
+                    if (activeCount > 0 && totalActiveSpeed > 0) {
+                        LiquidGlassPill(
+                            cornerRadius = 100.dp,
+                            tint = ElectricCyan
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Speed,
+                                contentDescription = null,
+                                tint = ElectricCyan,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = formatSpeed(totalActiveSpeed),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = ElectricCyan
+                            )
+                            if (totalSpeedHistory.isNotEmpty()) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                BandwidthSparkline(
+                                    history = totalSpeedHistory,
+                                    modifier = Modifier
+                                        .width(36.dp)
+                                        .height(14.dp),
+                                    lineColor = ElectricCyan,
+                                    fillColor = VibrantAzure
+                                )
+                            }
+                        }
                     }
-                    IconButton(
-                        onClick = onNavigateToDiagnostics,
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Icon(Icons.Default.BugReport, contentDescription = "Diagnostics", tint = TextPrimary, modifier = Modifier.size(18.dp))
-                    }
-                    IconButton(
-                        onClick = onNavigateToSettings,
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings", tint = TextPrimary, modifier = Modifier.size(18.dp))
+
+                    // Minimalist Overflow Action Menu (•••)
+                    Box {
+                        LiquidGlassIconButton(
+                            onClick = { showActionMenu = true },
+                            icon = Icons.Default.MoreHoriz,
+                            contentDescription = "Actions",
+                            modifier = Modifier.size(36.dp),
+                            cornerRadius = 12.dp
+                        )
+
+                        DropdownMenu(
+                            expanded = showActionMenu,
+                            onDismissRequest = { showActionMenu = false }
+                        ) {
+                            if (activeCount > 0) {
+                                DropdownMenuItem(
+                                    text = { Text("Pause All Transfers") },
+                                    leadingIcon = { Icon(Icons.Default.Pause, null, tint = GoldenAmber) },
+                                    onClick = {
+                                        showActionMenu = false
+                                        onPauseAll()
+                                    }
+                                )
+                            }
+                            if (failedOrPausedCount > 0) {
+                                DropdownMenuItem(
+                                    text = { Text("Resume All Transfers") },
+                                    leadingIcon = { Icon(Icons.Default.PlayArrow, null, tint = ElectricCyan) },
+                                    onClick = {
+                                        showActionMenu = false
+                                        onResumeAll()
+                                    }
+                                )
+                            }
+                            if (completedCount > 0) {
+                                DropdownMenuItem(
+                                    text = { Text("Clear Completed Transfers") },
+                                    leadingIcon = { Icon(Icons.Default.CleaningServices, null, tint = AuroraEmerald) },
+                                    onClick = {
+                                        showActionMenu = false
+                                        showClearCompletedDialog = true
+                                    }
+                                )
+                            }
+                            HorizontalDivider()
+                            SortOption.values().forEach { opt ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            opt.title,
+                                            fontWeight = if (selectedSort == opt) FontWeight.Bold else FontWeight.Normal
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        if (selectedSort == opt) {
+                                            Icon(Icons.Default.Check, null, tint = ElectricCyan)
+                                        }
+                                    },
+                                    onClick = {
+                                        selectedSort = opt
+                                        showActionMenu = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
-            }
-        },
-        floatingActionButton = {
-            LiquidGlassButton(
-                onClick = onNavigateToAdd,
-                isSolid = true,
-                accentColor = ElectricCyan,
-                cornerRadius = 100.dp,
-                contentPadding = PaddingValues(horizontal = 22.dp, vertical = 14.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, tint = PureBlack, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("New Download", fontWeight = FontWeight.ExtraBold, color = PureBlack, fontSize = 14.sp)
             }
         }
     ) { padding ->
@@ -227,172 +279,88 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            // Live Velocity Dock (when downloads are active)
-            AnimatedVisibility(
-                visible = activeCount > 0,
-                enter = fadeIn(tween(250)),
-                exit = fadeOut(tween(250))
-            ) {
-                LiquidGlassCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 6.dp),
-                    cornerRadius = 20.dp,
-                    isHighlighted = true,
-                    highlightColor = ElectricCyan
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(SquircleShape(10.dp))
-                                .background(ElectricCyan.copy(alpha = 0.22f)),
-                            contentAlignment = Alignment.Center
-                        ) {
+            // Minimalist iOS Liquid Glass Search Capsule
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
+                placeholder = { Text("Search transfers, URLs, types...", fontSize = 13.sp, color = TextMuted) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "Search",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
                             Icon(
-                                Icons.Default.Speed,
-                                contentDescription = null,
-                                tint = ElectricCyan,
-                                modifier = Modifier.size(20.dp)
+                                imageVector = Icons.Default.Clear,
+                                contentDescription = "Clear",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(18.dp)
                             )
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = formatSpeed(totalActiveSpeed),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = TextPrimary
-                            )
-                            Text(
-                                text = "$activeCount active stream${if (activeCount > 1) "s" else ""}",
-                                fontSize = 11.sp,
-                                color = ElectricCyan
-                            )
-                        }
-
-                        // Sparkline in velocity dock
-                        if (totalSpeedHistory.isNotEmpty()) {
-                            BandwidthSparkline(
-                                history = totalSpeedHistory,
-                                modifier = Modifier
-                                    .width(80.dp)
-                                    .height(30.dp),
-                                lineColor = ElectricCyan,
-                                fillColor = VibrantAzure
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                        }
-
-                        LiquidGlassButton(
-                            onClick = onPauseAll,
-                            accentColor = GoldenAmber,
-                            cornerRadius = 10.dp,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            Icon(Icons.Default.Pause, contentDescription = null, modifier = Modifier.size(14.dp), tint = GoldenAmber)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Pause All", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = GoldenAmber)
                         }
                     }
-                }
-            }
-
-            // Minimalist Search & Sort Capsule
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Search downloads, URLs, types...", fontSize = 13.sp, color = TextMuted) },
-                    leadingIcon = {
-                        Icon(Icons.Default.Search, contentDescription = "Search", tint = TextSecondary, modifier = Modifier.size(18.dp))
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Clear", tint = TextSecondary, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = SquircleShape(14.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedContainerColor = Color(0x14FFFFFF),
-                        focusedContainerColor = Color(0x22FFFFFF),
-                        unfocusedBorderColor = Color(0x20FFFFFF),
-                        focusedBorderColor = ElectricCyan,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    )
+                },
+                singleLine = true,
+                shape = SquircleShape(16.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    unfocusedContainerColor = Color(0x12FFFFFF),
+                    focusedContainerColor = Color(0x1EFFFFFF),
+                    unfocusedBorderColor = Color(0x20FFFFFF),
+                    focusedBorderColor = ElectricCyan,
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary
                 )
+            )
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Sort Button Capsule
-                Box {
-                    LiquidGlassIconButton(
-                        onClick = { showSortMenu = true },
-                        icon = Icons.Default.Sort,
-                        contentDescription = "Sort",
-                        cornerRadius = 14.dp,
-                        modifier = Modifier.size(46.dp)
-                    )
-                    DropdownMenu(
-                        expanded = showSortMenu,
-                        onDismissRequest = { showSortMenu = false }
-                    ) {
-                        SortOption.values().forEach { opt ->
-                            DropdownMenuItem(
-                                text = { Text(opt.title) },
-                                onClick = {
-                                    selectedSort = opt
-                                    showSortMenu = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Liquid Glass Segmented Filter Tabs
+            // Segmented iOS Liquid Glass Filter Tabs
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(horizontal = 20.dp, vertical = 6.dp)
+                    .clip(SquircleShape(14.dp))
+                    .background(Color(0x12FFFFFF))
+                    .border(1.dp, Color(0x1EFFFFFF), SquircleShape(14.dp))
+                    .padding(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 FilterTab.values().forEach { tab ->
                     val isSelected = selectedTab == tab
-                    val count = when (tab) {
+                    val tabTitle = when (tab) {
+                        FilterTab.ALL -> "All"
+                        FilterTab.ACTIVE -> "Active"
+                        FilterTab.COMPLETED -> "Done"
+                        FilterTab.FAILED -> "Failed"
+                    }
+                    val tabCount = when (tab) {
                         FilterTab.ALL -> downloads.size
                         FilterTab.ACTIVE -> activeCount
                         FilterTab.COMPLETED -> completedCount
                         FilterTab.FAILED -> failedOrPausedCount
                     }
-                    LiquidGlassPill(
-                        modifier = Modifier.weight(1f),
-                        tint = if (isSelected) ElectricCyan else null,
-                        isSolid = isSelected,
-                        cornerRadius = 12.dp,
-                        onClick = { selectedTab = tab }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(SquircleShape(11.dp))
+                            .background(
+                                if (isSelected) Brush.horizontalGradient(listOf(ElectricCyan, VibrantAzure))
+                                else Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                            )
+                            .clickable { selectedTab = tab }
+                            .padding(vertical = 7.dp),
+                        contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "${tab.name.lowercase().replaceFirstChar { it.uppercase() }} $count",
+                            text = "$tabTitle ($tabCount)",
                             fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) PureBlack else TextPrimary,
-                            maxLines = 1
+                            fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                            color = if (isSelected) PureBlack else TextSecondary
                         )
                     }
                 }
@@ -403,7 +371,7 @@ fun DashboardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 18.dp, vertical = 3.dp),
+                    .padding(horizontal = 20.dp, vertical = 3.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -420,69 +388,25 @@ fun DashboardScreen(
                     LiquidGlassPill(
                         tint = if (isSelected) catColor else null,
                         isSolid = isSelected,
-                        cornerRadius = 10.dp,
+                        cornerRadius = 100.dp,
                         onClick = { selectedCategory = cat }
                     ) {
                         Text(
                             text = cat.displayName,
                             fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             color = if (isSelected) PureBlack else TextPrimary
                         )
                     }
                 }
             }
 
-            // Batch Actions Subtle Bar
-            if (downloads.isNotEmpty() && (failedOrPausedCount > 0 || completedCount > 0)) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 18.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "${filteredList.size} item${if (filteredList.size != 1) "s" else ""}",
-                        fontSize = 11.sp,
-                        color = TextMuted
-                    )
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (failedOrPausedCount > 0) {
-                            LiquidGlassButton(
-                                onClick = onResumeAll,
-                                isSolid = true,
-                                accentColor = ElectricCyan,
-                                cornerRadius = 8.dp,
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                            ) {
-                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(13.dp), tint = PureBlack)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Resume All", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = PureBlack)
-                            }
-                        }
-
-                        if (completedCount > 0) {
-                            LiquidGlassButton(
-                                onClick = { showClearCompletedDialog = true },
-                                accentColor = TextSecondary,
-                                cornerRadius = 8.dp,
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                            ) {
-                                Icon(Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(13.dp), tint = TextPrimary)
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Clear Finished", fontSize = 11.sp, color = TextPrimary)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // List Content
+            // Main Download Transfer List
             if (filteredList.isEmpty()) {
                 Box(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(bottom = 108.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     LiquidGlassCard(
@@ -496,8 +420,9 @@ fun DashboardScreen(
                             Box(
                                 modifier = Modifier
                                     .size(64.dp)
-                                    .clip(SquircleShape(16.dp))
-                                    .background(ElectricCyan.copy(alpha = 0.16f)),
+                                    .clip(SquircleShape(18.dp))
+                                    .background(ElectricCyan.copy(alpha = 0.16f))
+                                    .border(1.dp, ElectricCyan.copy(alpha = 0.40f), SquircleShape(18.dp)),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
@@ -509,14 +434,14 @@ fun DashboardScreen(
                             }
                             Spacer(modifier = Modifier.height(14.dp))
                             Text(
-                                text = if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) "No matching downloads" else "No transfers here yet",
+                                text = if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) "No matching transfers" else "No transfers yet",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 color = TextPrimary
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) "Try adjusting your search terms or filters" else "Tap + New Download to accelerate a file",
+                                text = if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) "Try adjusting your search terms or filters" else "Tap + in the dock below to accelerate a file",
                                 fontSize = 12.sp,
                                 color = TextSecondary
                             )
@@ -541,7 +466,7 @@ fun DashboardScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 8.dp, bottom = 96.dp),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 108.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(filteredList, key = { it.id }) { item ->
@@ -573,10 +498,10 @@ fun DashboardScreen(
             icon = {
                 Icon(Icons.Default.CleaningServices, contentDescription = null, tint = ElectricCyan)
             },
-            title = { Text("Clear Completed Downloads?") },
+            title = { Text("Clear Completed Transfers?") },
             text = {
                 Column {
-                    Text("This will remove $completedCount completed download${if (completedCount > 1) "s" else ""} from your list.")
+                    Text("This will remove $completedCount completed transfer${if (completedCount > 1) "s" else ""} from your list.")
                     Spacer(modifier = Modifier.height(12.dp))
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -589,7 +514,7 @@ fun DashboardScreen(
                             onCheckedChange = { deleteFilesOnDisk = it }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Also delete files from device storage", fontSize = 13.sp)
+                        Text("Also delete downloaded files from storage", fontSize = 13.sp)
                     }
                 }
             },
@@ -647,17 +572,18 @@ fun DownloadCard(
 
     LiquidGlassCard(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 22.dp,
+        cornerRadius = 20.dp,
         isHighlighted = isDownloading,
         highlightColor = visuals.accentColor,
         onClick = onClick
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Header Row: File icon, name, status pill
+            // Primary Line: File Icon + Title & Stats + Quick Action Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Category Squircle Icon Plate
                 Box(
                     modifier = Modifier
                         .size(42.dp)
@@ -683,69 +609,109 @@ fun DownloadCard(
 
                 Spacer(modifier = Modifier.width(12.dp))
 
+                // Title and Sleek Inline Status
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = item.fileName,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         color = TextPrimary
                     )
                     Spacer(modifier = Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = visuals.categoryLabel,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = visuals.accentColor
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "• ${formatBytes(item.downloadedBytes)}" + (if (item.totalBytes > 0) " / ${formatBytes(item.totalBytes)}" else ""),
-                            fontSize = 11.sp,
-                            color = TextSecondary
-                        )
-                    }
+                    Text(
+                        text = when (item.status) {
+                            DownloadStatus.DOWNLOADING -> {
+                                val speedText = if (speed > 0) " • ${formatSpeed(speed)}" else ""
+                                "${visuals.categoryLabel} • ${formatBytes(item.downloadedBytes)} / ${formatBytes(item.totalBytes)}$speedText"
+                            }
+                            DownloadStatus.COMPLETED -> "${visuals.categoryLabel} • ${formatBytes(item.totalBytes)} • Completed"
+                            DownloadStatus.PAUSED -> "${visuals.categoryLabel} • ${formatBytes(item.downloadedBytes)} / ${formatBytes(item.totalBytes)} • Paused"
+                            DownloadStatus.FAILED -> "${visuals.categoryLabel} • Interrupted • Tap for diagnosis"
+                            else -> "${visuals.categoryLabel} • ${item.status.name.lowercase().replaceFirstChar { it.uppercase() }}"
+                        },
+                        fontSize = 11.sp,
+                        color = if (item.status == DownloadStatus.FAILED) CoralDanger else TextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Status Pill
-                val statusColor = when (item.status) {
-                    DownloadStatus.COMPLETED -> AuroraEmerald
-                    DownloadStatus.FAILED -> CoralDanger
-                    DownloadStatus.DOWNLOADING -> ElectricCyan
-                    else -> SolarWarning
+                // Fluid Quick Action Squircle Button
+                when (item.status) {
+                    DownloadStatus.DOWNLOADING -> {
+                        LiquidGlassIconButton(
+                            onClick = onPause,
+                            icon = Icons.Default.Pause,
+                            contentDescription = "Pause",
+                            tint = GoldenAmber,
+                            modifier = Modifier.size(34.dp),
+                            cornerRadius = 10.dp
+                        )
+                    }
+                    DownloadStatus.PAUSED -> {
+                        LiquidGlassIconButton(
+                            onClick = onResume,
+                            icon = Icons.Default.PlayArrow,
+                            contentDescription = "Resume",
+                            tint = ElectricCyan,
+                            modifier = Modifier.size(34.dp),
+                            cornerRadius = 10.dp
+                        )
+                    }
+                    DownloadStatus.FAILED -> {
+                        LiquidGlassIconButton(
+                            onClick = onRetry,
+                            icon = Icons.Default.Refresh,
+                            contentDescription = "Retry",
+                            tint = ElectricCyan,
+                            modifier = Modifier.size(34.dp),
+                            cornerRadius = 10.dp
+                        )
+                    }
+                    DownloadStatus.COMPLETED -> {
+                        LiquidGlassIconButton(
+                            onClick = onOpenFile,
+                            icon = Icons.Default.OpenInNew,
+                            contentDescription = "Open",
+                            tint = AuroraEmerald,
+                            modifier = Modifier.size(34.dp),
+                            cornerRadius = 10.dp
+                        )
+                    }
+                    else -> {}
                 }
-                LiquidGlassPill(
-                    tint = statusColor,
-                    cornerRadius = 8.dp
-                ) {
-                    Text(
-                        text = item.status.name,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = statusColor
-                    )
-                }
+
+                // Delete / Cancel Button
+                Spacer(modifier = Modifier.width(4.dp))
+                LiquidGlassIconButton(
+                    onClick = { if (item.status == DownloadStatus.COMPLETED) onDelete() else onCancel() },
+                    icon = Icons.Default.DeleteOutline,
+                    contentDescription = "Delete",
+                    tint = CoralDanger.copy(alpha = 0.8f),
+                    modifier = Modifier.size(34.dp),
+                    cornerRadius = 10.dp
+                )
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Animated Gradient Progress Bar
+            // Slender 4dp Glowing Squircle Progress Bar
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(5.dp)
-                    .clip(SquircleShape(3.dp))
-                    .background(Color(0x18FFFFFF))
+                    .height(4.dp)
+                    .clip(SquircleShape(2.dp))
+                    .background(Color(0x16FFFFFF))
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(animatedProgress)
                         .fillMaxHeight()
-                        .clip(SquircleShape(3.dp))
+                        .clip(SquircleShape(2.dp))
                         .background(
                             Brush.horizontalGradient(
                                 when (item.status) {
@@ -758,183 +724,49 @@ fun DownloadCard(
                 )
             }
 
-            // Sparkline for actively downloading files
+            // Embedded live sparkline for downloading files
             if (isDownloading && speedHistory.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 BandwidthSparkline(
                     history = speedHistory,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(26.dp),
+                        .height(22.dp),
                     lineColor = ElectricCyan,
                     fillColor = VibrantAzure
                 )
             }
 
-            // Inline Error Diagnostics for Failed Downloads
-            if (item.status == DownloadStatus.FAILED && !item.errorMessage.isNullOrBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
-                val classified = remember(item.errorMessage) {
-                    ErrorClassifier.parseOrClassify(item.errorMessage)
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(SquircleShape(10.dp))
-                        .background(CoralDanger.copy(alpha = 0.12f))
-                        .border(0.5.dp, CoralDanger.copy(alpha = 0.35f), SquircleShape(10.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = CoralDanger,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "${classified.title}: ${classified.userMessage}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = CoralDanger,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = classified.recoveryGuidance,
-                                fontSize = 10.sp,
-                                color = TextSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-            }
+            Spacer(modifier = Modifier.height(6.dp))
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Footer Row: Parallel Streams & Velocity info + Micro-Actions
+            // Footer Sub-row: Stream Concurrency & Percentage
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (item.isParallelTransfer) {
-                        LiquidGlassPill(
-                            tint = ElectricCyan,
-                            cornerRadius = 6.dp
-                        ) {
-                            Text(
-                                text = "${item.effectiveConnectionCount()}x Streams",
-                                fontSize = 10.sp,
-                                color = ElectricCyan,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    } else {
-                        val singleStreamLabel = if (!item.supportsRanges && item.concurrency > 1 &&
-                            item.status != DownloadStatus.QUEUED && item.status != DownloadStatus.DETECTING) {
-                            "Single Stream (No Ranges)"
-                        } else {
-                            "1 Stream"
-                        }
-                        LiquidGlassPill(cornerRadius = 6.dp) {
-                            Text(
-                                text = singleStreamLabel,
-                                fontSize = 10.sp,
-                                color = TextMuted
-                            )
-                        }
-                    }
-
-                    if (isDownloading && speed > 0) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = formatSpeed(speed),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = ElectricCyan
-                        )
-                    }
-
-                    if (item.totalBytes > 0) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "${(progress * 100).toInt()}%",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextSecondary
-                        )
-                    }
+                val streamLabel = if (item.isParallelTransfer) {
+                    "⚡ ${item.effectiveConnectionCount()}x Streams"
+                } else if (!item.supportsRanges && item.concurrency > 1 &&
+                    item.status != DownloadStatus.QUEUED && item.status != DownloadStatus.DETECTING) {
+                    "Single Stream"
+                } else {
+                    "1 Stream"
                 }
 
-                // Minimalist Glass Icon Action buttons
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    when (item.status) {
-                        DownloadStatus.DOWNLOADING -> {
-                            LiquidGlassIconButton(
-                                onClick = onPause,
-                                icon = Icons.Default.Pause,
-                                contentDescription = "Pause",
-                                tint = GoldenAmber,
-                                modifier = Modifier.size(32.dp),
-                                cornerRadius = 8.dp
-                            )
-                        }
-                        DownloadStatus.PAUSED -> {
-                            LiquidGlassIconButton(
-                                onClick = onResume,
-                                icon = Icons.Default.PlayArrow,
-                                contentDescription = "Resume",
-                                tint = ElectricCyan,
-                                modifier = Modifier.size(32.dp),
-                                cornerRadius = 8.dp
-                            )
-                        }
-                        DownloadStatus.FAILED -> {
-                            LiquidGlassIconButton(
-                                onClick = onRetry,
-                                icon = Icons.Default.Refresh,
-                                contentDescription = "Retry",
-                                tint = ElectricCyan,
-                                modifier = Modifier.size(32.dp),
-                                cornerRadius = 8.dp
-                            )
-                        }
-                        DownloadStatus.COMPLETED -> {
-                            LiquidGlassIconButton(
-                                onClick = onShareFile,
-                                icon = Icons.Default.Share,
-                                contentDescription = "Share",
-                                tint = VibrantAzure,
-                                modifier = Modifier.size(32.dp),
-                                cornerRadius = 8.dp
-                            )
-                            LiquidGlassIconButton(
-                                onClick = onOpenFile,
-                                icon = Icons.Default.OpenInNew,
-                                contentDescription = "Open",
-                                tint = AuroraEmerald,
-                                modifier = Modifier.size(32.dp),
-                                cornerRadius = 8.dp
-                            )
-                        }
-                        else -> {}
-                    }
-                    LiquidGlassIconButton(
-                        onClick = { if (item.status == DownloadStatus.COMPLETED) onDelete() else onCancel() },
-                        icon = Icons.Default.DeleteOutline,
-                        contentDescription = "Delete",
-                        tint = CoralDanger,
-                        modifier = Modifier.size(32.dp),
-                        cornerRadius = 8.dp
+                Text(
+                    text = streamLabel,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (item.isParallelTransfer) ElectricCyan else TextMuted
+                )
+
+                if (item.totalBytes > 0) {
+                    Text(
+                        text = "${(progress * 100).toInt()}%",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary
                     )
                 }
             }

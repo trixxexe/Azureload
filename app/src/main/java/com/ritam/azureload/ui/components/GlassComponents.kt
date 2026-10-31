@@ -32,7 +32,7 @@ import com.ritam.azureload.ui.theme.*
 /**
  * Ambient Luminous Backdrop for iOS Liquid Glass aesthetics.
  * Renders an ultra-deep obsidian background populated with soft, ethereal radiant color orbs
- * (Electric Cyan, Cyber Violet, Neon Magenta, Mint Teal) that frosted liquid glass surfaces
+ * (Electric Cyan, Cyber Violet, Neon Magenta, Mint Teal, Solar Gold) that frosted liquid glass surfaces
  * physically refract and specularly reflect.
  */
 @Composable
@@ -49,42 +49,55 @@ fun LiquidGlassBackdrop(
             val w = size.width
             val h = size.height
 
-            // Top-left luminous Cyan / Azure orb
+            // Top-left luminous Electric Cyan / Azure orb
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        ElectricCyan.copy(alpha = 0.16f),
-                        VibrantAzure.copy(alpha = 0.08f),
+                        ElectricCyan.copy(alpha = 0.20f),
+                        VibrantAzure.copy(alpha = 0.09f),
                         Color.Transparent
                     ),
-                    center = Offset(w * 0.15f, h * 0.12f),
+                    center = Offset(w * 0.12f, h * 0.10f),
+                    radius = (w * 0.80f).coerceAtLeast(320f)
+                )
+            )
+
+            // Top-right luminous Cyber Violet / Neon Magenta orb
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        NeonMagenta.copy(alpha = 0.16f),
+                        CyberViolet.copy(alpha = 0.10f),
+                        Color.Transparent
+                    ),
+                    center = Offset(w * 0.90f, h * 0.28f),
                     radius = (w * 0.75f).coerceAtLeast(300f)
                 )
             )
 
-            // Top-right / Center-right luminous Violet / Magenta orb
+            // Center-left subtle warm Solar Gold glow
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        NeonMagenta.copy(alpha = 0.12f),
-                        CyberViolet.copy(alpha = 0.08f),
+                        SolarGold.copy(alpha = 0.08f),
+                        SunsetCoral.copy(alpha = 0.04f),
                         Color.Transparent
                     ),
-                    center = Offset(w * 0.88f, h * 0.32f),
-                    radius = (w * 0.70f).coerceAtLeast(280f)
+                    center = Offset(w * 0.10f, h * 0.58f),
+                    radius = (w * 0.60f).coerceAtLeast(240f)
                 )
             )
 
-            // Bottom-center subtle Mint / Teal glow
+            // Bottom-center luminous Mint Teal glow
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        MintTeal.copy(alpha = 0.09f),
-                        AzurePrimary.copy(alpha = 0.04f),
+                        MintTeal.copy(alpha = 0.12f),
+                        AuroraEmerald.copy(alpha = 0.05f),
                         Color.Transparent
                     ),
-                    center = Offset(w * 0.45f, h * 0.82f),
-                    radius = (w * 0.65f).coerceAtLeast(260f)
+                    center = Offset(w * 0.50f, h * 0.85f),
+                    radius = (w * 0.70f).coerceAtLeast(280f)
                 )
             )
         }
@@ -95,7 +108,7 @@ fun LiquidGlassBackdrop(
 
 /**
  * Standard Liquid Glass Card with continuous-curvature G2 squircle shape,
- * translucent frosted glass ambient gradient, specular lighting highlight border,
+ * crystalline translucent frosted glass ambient gradient, specular lighting highlight border,
  * and tactile iOS spring press physics.
  */
 @Composable
@@ -111,27 +124,27 @@ fun LiquidGlassCard(
     val interactionSource = remember { MutableInteractionSource() }
 
     val borderTopColor by animateColorAsState(
-        targetValue = if (isHighlighted) highlightColor.copy(alpha = 0.75f) else Color(0x55FFFFFF),
-        animationSpec = tween(280),
+        targetValue = if (isHighlighted) highlightColor.copy(alpha = 0.85f) else Color(0x60FFFFFF),
+        animationSpec = tween(250),
         label = "glassBorderTop"
     )
     val borderBottomColor by animateColorAsState(
-        targetValue = if (isHighlighted) highlightColor.copy(alpha = 0.22f) else Color(0x12FFFFFF),
-        animationSpec = tween(280),
+        targetValue = if (isHighlighted) highlightColor.copy(alpha = 0.22f) else Color(0x10FFFFFF),
+        animationSpec = tween(250),
         label = "glassBorderBottom"
     )
 
     val surfaceColors = if (isHighlighted) {
         listOf(
-            highlightColor.copy(alpha = 0.14f),
-            Color(0x18152538),
-            Color(0x0C0D1826)
+            highlightColor.copy(alpha = 0.18f),
+            highlightColor.copy(alpha = 0.05f),
+            Color(0x06FFFFFF)
         )
     } else {
         listOf(
             Color(0x22FFFFFF),
-            Color(0x0E142236),
-            Color(0x0809111D)
+            Color(0x0BFFFFFF),
+            Color(0x04FFFFFF)
         )
     }
 
@@ -158,6 +171,158 @@ fun LiquidGlassCard(
             ),
         content = content
     )
+}
+
+/**
+ * Top-level tabs for the floating Liquid Glass navigation dock.
+ */
+enum class DockTab {
+    TRANSFERS, BROWSER, ADD, HEALTH, SETTINGS
+}
+
+/**
+ * Signature Floating iOS Liquid Glass Navigation Capsule Dock.
+ * Features Apple G2 continuous squircle geometry, crystalline frosted glass backdrop,
+ * specular refraction rim, tactile spring feedback on press, and a radiant center + action.
+ */
+@Composable
+fun FloatingLiquidGlassDock(
+    activeTab: DockTab,
+    onSelectTab: (DockTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val dockShape = remember { SquircleShape(30.dp) }
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(dockShape)
+                .background(
+                    brush = Brush.verticalGradient(
+                        listOf(
+                            Color(0x38182236),
+                            Color(0x240E1524)
+                        )
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    brush = Brush.verticalGradient(
+                        listOf(
+                            Color(0x65FFFFFF),
+                            Color(0x14FFFFFF)
+                        )
+                    ),
+                    shape = dockShape
+                )
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Transfers
+            DockItem(
+                icon = Icons.Default.CloudDownload,
+                label = "Transfers",
+                isSelected = activeTab == DockTab.TRANSFERS,
+                onClick = { onSelectTab(DockTab.TRANSFERS) }
+            )
+
+            // Browser
+            DockItem(
+                icon = Icons.Default.Language,
+                label = "Browser",
+                isSelected = activeTab == DockTab.BROWSER,
+                onClick = { onSelectTab(DockTab.BROWSER) }
+            )
+
+            // Center Highlighted Action: Add Download
+            val addInteraction = remember { MutableInteractionSource() }
+            Box(
+                modifier = Modifier
+                    .expressivePressScale(addInteraction, targetScale = 0.90f)
+                    .size(44.dp)
+                    .clip(SquircleShape(14.dp))
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            listOf(ElectricCyan, VibrantAzure)
+                        )
+                    )
+                    .border(1.dp, Color(0x99FFFFFF), SquircleShape(14.dp))
+                    .clickable(
+                        interactionSource = addInteraction,
+                        indication = ripple(color = PureWhite)
+                    ) { onSelectTab(DockTab.ADD) },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "New Download",
+                    tint = PureBlack,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            // Health / Diagnostics
+            DockItem(
+                icon = Icons.Default.Dns,
+                label = "Health",
+                isSelected = activeTab == DockTab.HEALTH,
+                onClick = { onSelectTab(DockTab.HEALTH) }
+            )
+
+            // Settings
+            DockItem(
+                icon = Icons.Default.Tune,
+                label = "Settings",
+                isSelected = activeTab == DockTab.SETTINGS,
+                onClick = { onSelectTab(DockTab.SETTINGS) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun DockItem(
+    icon: ImageVector,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val tint by animateColorAsState(
+        targetValue = if (isSelected) ElectricCyan else TextMuted,
+        animationSpec = tween(220),
+        label = "dockItemTint"
+    )
+
+    Column(
+        modifier = Modifier
+            .expressivePressScale(interaction, targetScale = 0.94f)
+            .clip(SquircleShape(16.dp))
+            .clickable(interactionSource = interaction, indication = null) { onClick() }
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = tint,
+            modifier = Modifier.size(21.dp)
+        )
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            color = tint
+        )
+    }
 }
 
 /**
