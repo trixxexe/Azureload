@@ -2,6 +2,7 @@ package com.ritam.azureload.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -28,36 +30,117 @@ import com.ritam.azureload.core.network.ErrorCategory
 import com.ritam.azureload.ui.theme.*
 
 /**
- * Standard Liquid Glass Card with continuous-curvature squircle shape,
- * translucent frosted glass ambient gradient, and specular lighting highlight border.
+ * Ambient Luminous Backdrop for iOS Liquid Glass aesthetics.
+ * Renders an ultra-deep obsidian background populated with soft, ethereal radiant color orbs
+ * (Electric Cyan, Cyber Violet, Neon Magenta, Mint Teal) that frosted liquid glass surfaces
+ * physically refract and specularly reflect.
+ */
+@Composable
+fun LiquidGlassBackdrop(
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(CosmicVoid)
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+
+            // Top-left luminous Cyan / Azure orb
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        ElectricCyan.copy(alpha = 0.16f),
+                        VibrantAzure.copy(alpha = 0.08f),
+                        Color.Transparent
+                    ),
+                    center = Offset(w * 0.15f, h * 0.12f),
+                    radius = (w * 0.75f).coerceAtLeast(300f)
+                )
+            )
+
+            // Top-right / Center-right luminous Violet / Magenta orb
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        NeonMagenta.copy(alpha = 0.12f),
+                        CyberViolet.copy(alpha = 0.08f),
+                        Color.Transparent
+                    ),
+                    center = Offset(w * 0.88f, h * 0.32f),
+                    radius = (w * 0.70f).coerceAtLeast(280f)
+                )
+            )
+
+            // Bottom-center subtle Mint / Teal glow
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        MintTeal.copy(alpha = 0.09f),
+                        AzurePrimary.copy(alpha = 0.04f),
+                        Color.Transparent
+                    ),
+                    center = Offset(w * 0.45f, h * 0.82f),
+                    radius = (w * 0.65f).coerceAtLeast(260f)
+                )
+            )
+        }
+
+        content()
+    }
+}
+
+/**
+ * Standard Liquid Glass Card with continuous-curvature G2 squircle shape,
+ * translucent frosted glass ambient gradient, specular lighting highlight border,
+ * and tactile iOS spring press physics.
  */
 @Composable
 fun LiquidGlassCard(
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 20.dp,
+    cornerRadius: Dp = 22.dp,
     isHighlighted: Boolean = false,
-    highlightColor: Color = NeonCyan,
+    highlightColor: Color = ElectricCyan,
     onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val shape = remember(cornerRadius) { SquircleShape(cornerRadius) }
+    val interactionSource = remember { MutableInteractionSource() }
 
     val borderTopColor by animateColorAsState(
-        targetValue = if (isHighlighted) highlightColor.copy(alpha = 0.65f) else Color(0x4AFFFFFF),
-        animationSpec = tween(300),
-        label = "borderTop"
+        targetValue = if (isHighlighted) highlightColor.copy(alpha = 0.75f) else Color(0x55FFFFFF),
+        animationSpec = tween(280),
+        label = "glassBorderTop"
     )
     val borderBottomColor by animateColorAsState(
-        targetValue = if (isHighlighted) highlightColor.copy(alpha = 0.20f) else Color(0x10FFFFFF),
-        animationSpec = tween(300),
-        label = "borderBottom"
+        targetValue = if (isHighlighted) highlightColor.copy(alpha = 0.22f) else Color(0x12FFFFFF),
+        animationSpec = tween(280),
+        label = "glassBorderBottom"
     )
 
-    val clickModifier = if (onClick != null) {
+    val surfaceColors = if (isHighlighted) {
+        listOf(
+            highlightColor.copy(alpha = 0.14f),
+            Color(0x18152538),
+            Color(0x0C0D1826)
+        )
+    } else {
+        listOf(
+            Color(0x22FFFFFF),
+            Color(0x0E142236),
+            Color(0x0809111D)
+        )
+    }
+
+    val interactiveModifier = if (onClick != null) {
         Modifier
+            .expressivePressScale(interactionSource)
             .clip(shape)
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = ripple()
             ) { onClick() }
     } else {
@@ -66,29 +149,11 @@ fun LiquidGlassCard(
 
     Box(
         modifier = modifier
-            .then(clickModifier)
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = if (isHighlighted) {
-                        listOf(
-                            highlightColor.copy(alpha = 0.14f),
-                            Color(0x10152538),
-                            Color(0x0A0D1826)
-                        )
-                    } else {
-                        listOf(
-                            Color(0x22FFFFFF),
-                            Color(0x0E1A293E),
-                            Color(0x08101C2B)
-                        )
-                    }
-                )
-            )
+            .then(interactiveModifier)
+            .background(brush = Brush.verticalGradient(colors = surfaceColors))
             .border(
                 width = 1.dp,
-                brush = Brush.verticalGradient(
-                    colors = listOf(borderTopColor, borderBottomColor)
-                ),
+                brush = Brush.verticalGradient(listOf(borderTopColor, borderBottomColor)),
                 shape = shape
             ),
         content = content
@@ -101,7 +166,7 @@ fun LiquidGlassCard(
 @Composable
 fun GlassCard(
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 20.dp,
+    cornerRadius: Dp = 22.dp,
     onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
@@ -111,48 +176,6 @@ fun GlassCard(
         onClick = onClick,
         content = content
     )
-}
-
-/**
- * Liquid Glass Action Tile widget for dashboard quick shortcuts and operations.
- */
-@Composable
-fun LiquidGlassActionTile(
-    title: String,
-    subtitle: String,
-    icon: ImageVector,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    accentColor: Color = NeonCyan
-) {
-    LiquidGlassCard(
-        modifier = modifier,
-        cornerRadius = 20.dp,
-        onClick = onClick
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = accentColor,
-                modifier = Modifier.size(28.dp)
-            )
-            Text(
-                text = title,
-                color = AzureOnSurface,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = subtitle,
-                color = AzureOnSurfaceVariant,
-                fontSize = 11.sp
-            )
-        }
-    }
 }
 
 /**
@@ -169,11 +192,14 @@ fun LiquidGlassPill(
     content: @Composable RowScope.() -> Unit
 ) {
     val shape = remember(cornerRadius) { SquircleShape(cornerRadius) }
-    val baseModifier = if (onClick != null) {
+    val interactionSource = remember { MutableInteractionSource() }
+
+    val interactiveModifier = if (onClick != null) {
         modifier
+            .expressivePressScale(interactionSource, targetScale = 0.95f)
             .clip(shape)
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = ripple()
             ) { onClick() }
     } else {
@@ -182,15 +208,19 @@ fun LiquidGlassPill(
 
     val bgBrush = when {
         isSolid -> {
-            val primaryColor = tint ?: NeonCyan
-            val secondaryColor = if (primaryColor == NeonCyan) AzurePrimary else primaryColor.copy(alpha = 0.85f)
-            Brush.horizontalGradient(
-                colors = listOf(primaryColor, secondaryColor)
-            )
+            val primaryColor = tint ?: ElectricCyan
+            val secondaryColor = when (primaryColor) {
+                ElectricCyan -> VibrantAzure
+                NeonMagenta -> CyberViolet
+                AuroraEmerald -> MintTeal
+                TangerineGlow -> GoldenAmber
+                else -> primaryColor.copy(alpha = 0.85f)
+            }
+            Brush.horizontalGradient(listOf(primaryColor, secondaryColor))
         }
         tint != null -> {
             Brush.verticalGradient(
-                colors = listOf(
+                listOf(
                     tint.copy(alpha = 0.22f),
                     tint.copy(alpha = 0.08f)
                 )
@@ -198,8 +228,8 @@ fun LiquidGlassPill(
         }
         else -> {
             Brush.verticalGradient(
-                colors = listOf(
-                    Color(0x24FFFFFF),
+                listOf(
+                    Color(0x22FFFFFF),
                     Color(0x0CFFFFFF)
                 )
             )
@@ -207,37 +237,26 @@ fun LiquidGlassPill(
     }
 
     val borderBrush = when {
-        isSolid -> {
-            Brush.verticalGradient(
-                colors = listOf(
-                    Color(0x80FFFFFF),
-                    Color(0x30FFFFFF)
-                )
+        isSolid -> Brush.verticalGradient(listOf(Color(0x80FFFFFF), Color(0x25FFFFFF)))
+        tint != null -> Brush.verticalGradient(
+            listOf(
+                tint.copy(alpha = (borderAlpha + 0.25f).coerceAtMost(1f)),
+                tint.copy(alpha = (borderAlpha * 0.4f).coerceAtMost(1f))
             )
-        }
-        tint != null -> {
-            Brush.verticalGradient(
-                colors = listOf(
-                    tint.copy(alpha = (borderAlpha + 0.2f).coerceAtMost(1f)),
-                    tint.copy(alpha = (borderAlpha * 0.5f).coerceAtMost(1f))
-                )
+        )
+        else -> Brush.verticalGradient(
+            listOf(
+                Color(0x45FFFFFF),
+                Color(0x10FFFFFF)
             )
-        }
-        else -> {
-            Brush.verticalGradient(
-                colors = listOf(
-                    Color(0x45FFFFFF),
-                    Color(0x10FFFFFF)
-                )
-            )
-        }
+        )
     }
 
     Row(
-        modifier = baseModifier
+        modifier = interactiveModifier
             .background(bgBrush)
             .border(1.dp, borderBrush, shape)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .padding(horizontal = 11.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
         content = content
@@ -245,7 +264,7 @@ fun LiquidGlassPill(
 }
 
 /**
- * Liquid Glass Button with squircle shape, specular border, and neon accents.
+ * Liquid Glass Button with squircle shape, specular border, radiant neons, and fluid spring physics.
  */
 @Composable
 fun LiquidGlassButton(
@@ -253,34 +272,35 @@ fun LiquidGlassButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     isSolid: Boolean = false,
-    accentColor: Color = AzurePrimary,
+    accentColor: Color = ElectricCyan,
     cornerRadius: Dp = 16.dp,
-    contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+    contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 11.dp),
     content: @Composable RowScope.() -> Unit
 ) {
     val shape = remember(cornerRadius) { SquircleShape(cornerRadius) }
+    val interactionSource = remember { MutableInteractionSource() }
 
     val bgBrush = when {
         !enabled -> Brush.verticalGradient(listOf(Color(0x10FFFFFF), Color(0x05FFFFFF)))
         isSolid -> {
-            val startColor = if (accentColor == AzurePrimary) NeonCyan else accentColor
-            val endColor = if (accentColor == AzurePrimary) AzurePrimary else accentColor.copy(alpha = 0.85f)
+            val startColor = if (accentColor == AzurePrimary) ElectricCyan else accentColor
+            val endColor = if (accentColor == AzurePrimary) VibrantAzure else accentColor.copy(alpha = 0.85f)
             Brush.horizontalGradient(listOf(startColor, endColor))
         }
         else -> Brush.verticalGradient(
             listOf(
-                accentColor.copy(alpha = 0.26f),
-                accentColor.copy(alpha = 0.10f)
+                accentColor.copy(alpha = 0.25f),
+                accentColor.copy(alpha = 0.09f)
             )
         )
     }
 
     val borderBrush = when {
         !enabled -> Brush.verticalGradient(listOf(Color(0x1AFFFFFF), Color(0x08FFFFFF)))
-        isSolid -> Brush.verticalGradient(listOf(Color(0x90FFFFFF), Color(0x30FFFFFF)))
+        isSolid -> Brush.verticalGradient(listOf(Color(0x90FFFFFF), Color(0x28FFFFFF)))
         else -> Brush.verticalGradient(
             listOf(
-                accentColor.copy(alpha = 0.65f),
+                accentColor.copy(alpha = 0.70f),
                 accentColor.copy(alpha = 0.20f)
             )
         )
@@ -288,12 +308,13 @@ fun LiquidGlassButton(
 
     Box(
         modifier = modifier
+            .expressivePressScale(interactionSource, targetScale = 0.96f)
             .clip(shape)
             .background(bgBrush)
             .border(1.dp, borderBrush, shape)
             .clickable(
                 enabled = enabled,
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = ripple()
             ) { onClick() }
             .padding(contentPadding),
@@ -308,6 +329,55 @@ fun LiquidGlassButton(
 }
 
 /**
+ * Liquid Glass Icon Button: sleek frosted glass circular or squircle icon button.
+ */
+@Composable
+fun LiquidGlassIconButton(
+    onClick: () -> Unit,
+    icon: ImageVector,
+    contentDescription: String?,
+    modifier: Modifier = Modifier.size(40.dp),
+    tint: Color = TextPrimary,
+    accentBg: Color? = null,
+    cornerRadius: Dp = 100.dp
+) {
+    val shape = remember(cornerRadius) { SquircleShape(cornerRadius) }
+    val interactionSource = remember { MutableInteractionSource() }
+
+    val bgBrush = if (accentBg != null) {
+        Brush.verticalGradient(listOf(accentBg.copy(alpha = 0.25f), accentBg.copy(alpha = 0.08f)))
+    } else {
+        Brush.verticalGradient(listOf(Color(0x24FFFFFF), Color(0x0CFFFFFF)))
+    }
+
+    val borderBrush = if (accentBg != null) {
+        Brush.verticalGradient(listOf(accentBg.copy(alpha = 0.65f), accentBg.copy(alpha = 0.18f)))
+    } else {
+        Brush.verticalGradient(listOf(Color(0x50FFFFFF), Color(0x12FFFFFF)))
+    }
+
+    Box(
+        modifier = modifier
+            .expressivePressScale(interactionSource, targetScale = 0.92f)
+            .clip(shape)
+            .background(bgBrush)
+            .border(1.dp, borderBrush, shape)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple()
+            ) { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+/**
  * Liquid Glass Stat Card Widget with specular rim and squircle icon container.
  */
 @Composable
@@ -317,7 +387,7 @@ fun LiquidGlassStatWidget(
     subtitle: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
-    accentColor: Color = AzurePrimary
+    accentColor: Color = ElectricCyan
 ) {
     LiquidGlassCard(
         modifier = modifier.fillMaxWidth(),
@@ -350,14 +420,14 @@ fun LiquidGlassStatWidget(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title.uppercase(),
-                    color = AzureOnSurfaceVariant,
+                    color = TextMuted,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.8.sp
                 )
                 Text(
                     text = value,
-                    color = AzureOnSurface,
+                    color = TextPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
@@ -368,6 +438,48 @@ fun LiquidGlassStatWidget(
                     fontWeight = FontWeight.Medium
                 )
             }
+        }
+    }
+}
+
+/**
+ * Liquid Glass Action Tile widget for dashboard quick shortcuts and operations.
+ */
+@Composable
+fun LiquidGlassActionTile(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    accentColor: Color = ElectricCyan
+) {
+    LiquidGlassCard(
+        modifier = modifier,
+        cornerRadius = 20.dp,
+        onClick = onClick
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = accentColor,
+                modifier = Modifier.size(28.dp)
+            )
+            Text(
+                text = title,
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = subtitle,
+                color = TextSecondary,
+                fontSize = 11.sp
+            )
         }
     }
 }
@@ -385,16 +497,16 @@ fun LiquidGlassErrorCard(
     modifier: Modifier = Modifier
 ) {
     val categoryColor = when (error.category) {
-        ErrorCategory.DNS, ErrorCategory.NETWORK_OFFLINE -> AzureWarning
-        ErrorCategory.SSL -> NeonPink
-        ErrorCategory.TIMEOUT -> AzureWarning
-        ErrorCategory.STORAGE_FULL -> Color(0xFFFF9100)
-        ErrorCategory.DISK_IO -> Color(0xFFFF6D00)
-        ErrorCategory.PERMISSION_DENIED -> AzureError
-        ErrorCategory.INTEGRITY_MISMATCH -> Color(0xFFFF1744)
-        ErrorCategory.HTTP_CLIENT -> AzureError
-        ErrorCategory.HTTP_SERVER -> Color(0xFFFF5252)
-        ErrorCategory.UNKNOWN -> AzureError
+        ErrorCategory.DNS, ErrorCategory.NETWORK_OFFLINE -> SolarWarning
+        ErrorCategory.SSL -> NeonMagenta
+        ErrorCategory.TIMEOUT -> SolarWarning
+        ErrorCategory.STORAGE_FULL -> TangerineGlow
+        ErrorCategory.DISK_IO -> TangerineGlow
+        ErrorCategory.PERMISSION_DENIED -> CoralDanger
+        ErrorCategory.INTEGRITY_MISMATCH -> NeonMagenta
+        ErrorCategory.HTTP_CLIENT -> CoralDanger
+        ErrorCategory.HTTP_SERVER -> SunsetCoral
+        ErrorCategory.UNKNOWN -> CoralDanger
     }
 
     val categoryIcon = when (error.category) {
@@ -453,7 +565,7 @@ fun LiquidGlassErrorCard(
                     ) {
                         Text(
                             text = "HTTP ${error.httpStatusCode}",
-                            color = AzureOnSurface,
+                            color = TextPrimary,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -468,13 +580,13 @@ fun LiquidGlassErrorCard(
                 text = error.title,
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
-                color = AzureOnSurface
+                color = TextPrimary
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = error.userMessage,
                 fontSize = 12.sp,
-                color = AzureOnSurfaceVariant
+                color = TextSecondary
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -484,7 +596,7 @@ fun LiquidGlassErrorCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(SquircleShape(10.dp))
-                    .background(Color(0x18FFFFFF))
+                    .background(Color(0x16FFFFFF))
                     .border(0.5.dp, Color(0x28FFFFFF), SquircleShape(10.dp))
                     .padding(horizontal = 10.dp, vertical = 8.dp)
             ) {
@@ -508,7 +620,7 @@ fun LiquidGlassErrorCard(
                         Text(
                             text = error.recoveryGuidance,
                             fontSize = 11.sp,
-                            color = AzureOnSurface
+                            color = TextPrimary
                         )
                     }
                 }
@@ -520,7 +632,7 @@ fun LiquidGlassErrorCard(
                 Text(
                     text = "Technical Details: ${error.rawMessage}",
                     fontSize = 10.sp,
-                    color = AzureOnSurfaceVariant.copy(alpha = 0.7f),
+                    color = TextMuted,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -536,13 +648,13 @@ fun LiquidGlassErrorCard(
                 if (onCopyDetails != null) {
                     LiquidGlassButton(
                         onClick = onCopyDetails,
-                        accentColor = AzureOnSurfaceVariant,
+                        accentColor = TextSecondary,
                         cornerRadius = 10.dp,
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                     ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp), tint = AzureOnSurface)
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp), tint = TextPrimary)
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Copy Info", fontSize = 11.sp, color = AzureOnSurface)
+                        Text("Copy Info", fontSize = 11.sp, color = TextPrimary)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                 }
@@ -551,7 +663,7 @@ fun LiquidGlassErrorCard(
                     LiquidGlassButton(
                         onClick = onRetry,
                         isSolid = true,
-                        accentColor = if (error.isRetryable) AzurePrimary else AzureWarning,
+                        accentColor = if (error.isRetryable) ElectricCyan else SolarWarning,
                         cornerRadius = 10.dp,
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {

@@ -97,19 +97,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xFF060913),
-                                    Color(0xFF0C1428),
-                                    Color(0xFF080D1A)
-                                )
-                            )
-                        )
-                ) {
+                com.ritam.azureload.ui.components.LiquidGlassBackdrop {
                     val navController = rememberNavController()
                     val downloads by repository.getAllDownloads().collectAsStateWithLifecycle(initialValue = emptyList())
                     val speeds by coordinator.speeds.collectAsStateWithLifecycle()

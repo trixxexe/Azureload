@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.ritam.azureload.ui.components.LiquidGlassCard
+import com.ritam.azureload.ui.components.LiquidGlassIconButton
 import com.ritam.azureload.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -83,7 +84,7 @@ fun BrowserScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .statusBarsPadding()
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
             ) {
                 // Liquid Glass Address Bar
                 val addressShape = remember { SquircleShape(18.dp) }
@@ -104,12 +105,13 @@ fun BrowserScreen(
                         .padding(horizontal = 6.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
+                    LiquidGlassIconButton(
                         onClick = onBack,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = "Close Browser", tint = AzureOnSurface, modifier = Modifier.size(20.dp))
-                    }
+                        icon = Icons.Default.Close,
+                        contentDescription = "Close Browser",
+                        modifier = Modifier.size(34.dp),
+                        cornerRadius = 10.dp
+                    )
 
                     OutlinedTextField(
                         value = urlInput,
@@ -118,8 +120,8 @@ fun BrowserScreen(
                             .weight(1f)
                             .height(44.dp),
                         singleLine = true,
-                        placeholder = { Text("Search or type URL...", fontSize = 13.sp, color = AzureOnSurfaceVariant) },
-                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, color = AzureOnSurface),
+                        placeholder = { Text("Search or type URL...", fontSize = 13.sp, color = TextMuted) },
+                        textStyle = LocalTextStyle.current.copy(fontSize = 13.sp, color = TextPrimary),
                         colors = OutlinedTextFieldDefaults.colors(
                             unfocusedBorderColor = Color.Transparent,
                             focusedBorderColor = Color.Transparent,
@@ -128,7 +130,7 @@ fun BrowserScreen(
                         )
                     )
 
-                    IconButton(
+                    LiquidGlassIconButton(
                         onClick = {
                             var dest = urlInput.trim()
                             if (!dest.startsWith("http://") && !dest.startsWith("https://")) {
@@ -136,37 +138,45 @@ fun BrowserScreen(
                             }
                             webView?.loadUrl(dest)
                         },
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(SquircleShape(10.dp))
-                            .background(AzurePrimary.copy(alpha = 0.25f))
-                    ) {
-                        Icon(Icons.Default.ArrowForward, contentDescription = "Go", tint = AzurePrimary, modifier = Modifier.size(18.dp))
-                    }
+                        icon = Icons.Default.ArrowForward,
+                        contentDescription = "Go",
+                        modifier = Modifier.size(34.dp),
+                        tint = PureBlack,
+                        accentBg = ElectricCyan,
+                        cornerRadius = 10.dp
+                    )
                 }
 
                 if (isLoading) {
                     Spacer(modifier = Modifier.height(4.dp))
-                    LinearProgressIndicator(
-                        progress = { loadingProgress / 100f },
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(3.dp)
-                            .clip(SquircleShape(2.dp)),
-                        color = NeonCyan,
-                        trackColor = Color(0x20FFFFFF)
-                    )
+                            .clip(SquircleShape(2.dp))
+                            .background(Color(0x18FFFFFF))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth(loadingProgress / 100f)
+                                .fillMaxHeight()
+                                .clip(SquircleShape(2.dp))
+                                .background(
+                                    Brush.horizontalGradient(listOf(ElectricCyan, VibrantAzure))
+                                )
+                        )
+                    }
                 }
             }
         },
         bottomBar = {
             // Floating Liquid Glass Navigation Capsule Dock
-            val dockShape = remember { SquircleShape(26.dp) }
+            val dockShape = remember { SquircleShape(28.dp) }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Row(
@@ -183,43 +193,36 @@ fun BrowserScreen(
                             Brush.verticalGradient(listOf(Color(0x60FFFFFF), Color(0x15FFFFFF))),
                             dockShape
                         )
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
+                    LiquidGlassIconButton(
                         onClick = { webView?.goBack() },
-                        enabled = canGoBack,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = "Back",
-                            tint = if (canGoBack) AzureOnSurface else AzureOnSurfaceVariant.copy(alpha = 0.35f)
-                        )
-                    }
+                        icon = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        modifier = Modifier.size(40.dp),
+                        tint = if (canGoBack) TextPrimary else TextMuted
+                    )
 
-                    IconButton(
+                    LiquidGlassIconButton(
                         onClick = { webView?.goForward() },
-                        enabled = canGoForward,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            Icons.Default.ArrowForward,
-                            contentDescription = "Forward",
-                            tint = if (canGoForward) AzureOnSurface else AzureOnSurfaceVariant.copy(alpha = 0.35f)
-                        )
-                    }
+                        icon = Icons.Default.ArrowForward,
+                        contentDescription = "Forward",
+                        modifier = Modifier.size(40.dp),
+                        tint = if (canGoForward) TextPrimary else TextMuted
+                    )
 
-                    IconButton(
+                    LiquidGlassIconButton(
                         onClick = { webView?.reload() },
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Reload", tint = AzureOnSurface)
-                    }
+                        icon = Icons.Default.Refresh,
+                        contentDescription = "Reload",
+                        modifier = Modifier.size(40.dp),
+                        tint = TextPrimary
+                    )
 
                     // Sniff / Intercept download action button
-                    IconButton(
+                    LiquidGlassIconButton(
                         onClick = {
                             val urlToDownload = webView?.url
                             if (!urlToDownload.isNullOrBlank()) {
@@ -228,18 +231,13 @@ fun BrowserScreen(
                                 onInterceptDownload(urlToDownload, cookie, userAgent, null)
                             }
                         },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(SquircleShape(12.dp))
-                            .background(AzurePrimary.copy(alpha = 0.22f))
-                            .border(1.dp, AzurePrimary.copy(alpha = 0.5f), SquircleShape(12.dp))
-                    ) {
-                        Icon(
-                            Icons.Default.Download,
-                            contentDescription = "Download Current Page",
-                            tint = AzurePrimary
-                        )
-                    }
+                        icon = Icons.Default.Download,
+                        contentDescription = "Download Current Page",
+                        modifier = Modifier.size(40.dp),
+                        tint = PureBlack,
+                        accentBg = ElectricCyan,
+                        cornerRadius = 12.dp
+                    )
                 }
             }
         }

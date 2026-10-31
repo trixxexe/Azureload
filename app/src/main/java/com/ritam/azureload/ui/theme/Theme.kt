@@ -17,41 +17,41 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = AzurePrimary,
+    primary = ElectricCyan,
     onPrimary = PureBlack,
-    primaryContainer = AzurePrimaryContainer,
-    onPrimaryContainer = AzureOnPrimaryContainer,
-    secondary = AzureSecondary,
-    tertiary = AzureTertiary,
-    background = LiquidBackgroundDark,
-    surface = LiquidSurfaceDark,
-    surfaceVariant = Color(0xFF131D33),
-    onBackground = AzureOnSurface,
-    onSurface = AzureOnSurface,
-    onSurfaceVariant = AzureOnSurfaceVariant,
-    error = AzureError
+    primaryContainer = VibrantAzure,
+    onPrimaryContainer = Color(0xFFCAF0F8),
+    secondary = SkyBlue,
+    tertiary = CyberViolet,
+    background = CosmicVoid,
+    surface = ObsidianDark,
+    surfaceVariant = Color(0xFF10192E),
+    onBackground = TextPrimary,
+    onSurface = TextPrimary,
+    onSurfaceVariant = TextSecondary,
+    error = CoralDanger
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF0284C7),
-    onPrimary = Color.White,
+    primary = VibrantAzure,
+    onPrimary = PureWhite,
     primaryContainer = Color(0xFFE0F2FE),
     onPrimaryContainer = Color(0xFF0369A1),
-    secondary = Color(0xFF0EA5E9),
-    tertiary = Color(0xFF0D9488),
+    secondary = ElectricCyan,
+    tertiary = CyberViolet,
     background = Color(0xFFF8FAFC),
-    surface = Color.White,
+    surface = PureWhite,
     surfaceVariant = Color(0xFFF1F5F9),
     onBackground = Color(0xFF0F172A),
     onSurface = Color(0xFF0F172A),
     onSurfaceVariant = Color(0xFF475569),
-    error = Color(0xFFDC2626)
+    error = CoralDanger
 )
 
 @Composable
 fun AzureloadTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // prioritize liquid azure neon aesthetics
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
@@ -70,6 +70,10 @@ fun AzureloadTheme(
             if (window != null) {
                 window.statusBarColor = Color.Transparent.toArgb()
                 window.navigationBarColor = Color.Transparent.toArgb()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    window.isStatusBarContrastEnforced = false
+                    window.isNavigationBarContrastEnforced = false
+                }
                 WindowCompat.getInsetsController(window, view).apply {
                     isAppearanceLightStatusBars = !darkTheme
                     isAppearanceLightNavigationBars = !darkTheme

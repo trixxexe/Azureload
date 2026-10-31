@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ritam.azureload.feature.dashboard.formatBytes
 import com.ritam.azureload.ui.components.LiquidGlassCard
+import com.ritam.azureload.ui.components.LiquidGlassIconButton
 import com.ritam.azureload.ui.components.LiquidGlassPill
 import com.ritam.azureload.ui.theme.*
 import java.io.File
@@ -36,19 +37,30 @@ fun DiagnosticsScreen(
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                title = { Text("Diagnostics & Health", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = AzureOnSurface,
-                    navigationIconContentColor = AzureOnSurface
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 18.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LiquidGlassIconButton(
+                    onClick = onBack,
+                    icon = Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    modifier = Modifier.size(40.dp)
                 )
-            )
+
+                Text(
+                    text = "Diagnostics & Health",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = TextPrimary
+                )
+
+                Spacer(modifier = Modifier.size(40.dp))
+            }
         }
     ) { padding ->
         Column(
@@ -56,7 +68,7 @@ fun DiagnosticsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(horizontal = 18.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Storage Health Card
@@ -64,35 +76,36 @@ fun DiagnosticsScreen(
                 text = "Storage & Buffer Safety",
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
-                color = AzurePrimary,
+                color = ElectricCyan,
                 letterSpacing = 0.5.sp
             )
 
-            LiquidGlassCard(cornerRadius = 20.dp) {
+            LiquidGlassCard(cornerRadius = 22.dp) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
-                                .background(AzurePrimary.copy(alpha = 0.2f), SquircleShape(10.dp)),
+                                .clip(SquircleShape(10.dp))
+                                .background(ElectricCyan.copy(alpha = 0.2f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Storage, contentDescription = null, tint = AzurePrimary, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Storage, contentDescription = null, tint = ElectricCyan, modifier = Modifier.size(20.dp))
                         }
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text("Internal Storage & Staging", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AzureOnSurface)
+                        Text("Internal Storage & Staging", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary)
                     }
                     Spacer(modifier = Modifier.height(14.dp))
-                    Text("Free Space: ${formatBytes(usableSpace)}", fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
-                    Text("Total Capacity: ${formatBytes(totalSpace)}", fontSize = 12.sp, color = AzureOnSurfaceVariant)
+                    Text("Free Space: ${formatBytes(usableSpace)}", fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Text("Total Capacity: ${formatBytes(totalSpace)}", fontSize = 12.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Staging Location: ${stagingDir.absolutePath}", fontSize = 11.sp, color = AzureOnSurfaceVariant)
-                    Text("Active Staging Files: ${partFiles.size}", fontSize = 11.sp, color = AzureOnSurfaceVariant)
+                    Text("Staging Location: ${stagingDir.absolutePath}", fontSize = 11.sp, color = TextMuted)
+                    Text("Active Staging Part Files: ${partFiles.size}", fontSize = 11.sp, color = TextMuted)
                     Spacer(modifier = Modifier.height(10.dp))
-                    LiquidGlassPill(tint = AzureSuccess, cornerRadius = 8.dp) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = AzureSuccess, modifier = Modifier.size(13.dp))
+                    LiquidGlassPill(tint = AuroraEmerald, cornerRadius = 8.dp) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = AuroraEmerald, modifier = Modifier.size(13.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Pre-allocation Space Guard Active", fontSize = 11.sp, color = AzureSuccess, fontWeight = FontWeight.SemiBold)
+                        Text("Pre-allocation Space Guard Active", fontSize = 11.sp, color = AuroraEmerald, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -102,32 +115,33 @@ fun DiagnosticsScreen(
                 text = "Memory Leak Protection & Concurrency",
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
-                color = AzurePrimary,
+                color = ElectricCyan,
                 letterSpacing = 0.5.sp
             )
 
-            LiquidGlassCard(cornerRadius = 20.dp) {
+            LiquidGlassCard(cornerRadius = 22.dp) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
                             modifier = Modifier
                                 .size(36.dp)
-                                .background(NeonCyan.copy(alpha = 0.2f), SquircleShape(10.dp)),
+                                .clip(SquircleShape(10.dp))
+                                .background(CyberViolet.copy(alpha = 0.2f)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Memory, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Memory, contentDescription = null, tint = CyberViolet, modifier = Modifier.size(20.dp))
                         }
                         Spacer(modifier = Modifier.width(10.dp))
-                        Text("Mobile Best Practices & Lifecycle", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AzureOnSurface)
+                        Text("Mobile Best Practices & Lifecycle", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary)
                     }
                     Spacer(modifier = Modifier.height(14.dp))
-                    Text("Active Coordinator Jobs: $activeJobsCount", fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
+                    Text("Active Coordinator Jobs: $activeJobsCount", fontWeight = FontWeight.SemiBold, color = TextPrimary)
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text("• Lifecycle-Aware Flow Collection: Uses collectAsStateWithLifecycle to halt collection when backgrounded", fontSize = 11.sp, color = AzureOnSurfaceVariant)
-                    Text("• WebView Cleanup on Disposal: Destroyed on composition teardown to prevent Activity context leaks", fontSize = 11.sp, color = AzureOnSurfaceVariant)
-                    Text("• Bounded I/O Buffers: 32KB/64KB chunk buffers prevent OutOfMemory crashes on large files", fontSize = 11.sp, color = AzureOnSurfaceVariant)
-                    Text("• OkHttp Connection Pool: 32 idle connections bounded to 5-minute keepalive", fontSize = 11.sp, color = AzureOnSurfaceVariant)
-                    Text("• Foreground Service Scoping: Automatically stops when all downloads conclude or pause", fontSize = 11.sp, color = AzureOnSurfaceVariant)
+                    Text("• Lifecycle-Aware Flow Collection: Halts collection when backgrounded via collectAsStateWithLifecycle", fontSize = 11.sp, color = TextSecondary)
+                    Text("• WebView Memory Leak Prevention: Explicitly torn down on composition disposal", fontSize = 11.sp, color = TextSecondary)
+                    Text("• Bounded I/O Buffers: 32KB/64KB chunk buffers prevent OutOfMemory on multi-gigabyte transfers", fontSize = 11.sp, color = TextSecondary)
+                    Text("• OkHttp Connection Pool: 32 idle connections bounded to 5-minute keepalive", fontSize = 11.sp, color = TextSecondary)
+                    Text("• Foreground Service Scoping: Automatically stops when all downloads conclude or pause", fontSize = 11.sp, color = TextSecondary)
                 }
             }
 
@@ -136,16 +150,16 @@ fun DiagnosticsScreen(
                 text = "Structured Error Classification Matrix",
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
-                color = AzurePrimary,
+                color = ElectricCyan,
                 letterSpacing = 0.5.sp
             )
 
-            LiquidGlassCard(cornerRadius = 20.dp) {
+            LiquidGlassCard(cornerRadius = 22.dp) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Text(
                         "Azureload classifies all failures into structured error models with tailored recovery guidance:",
                         fontSize = 12.sp,
-                        color = AzureOnSurface
+                        color = TextPrimary
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
@@ -164,13 +178,13 @@ fun DiagnosticsScreen(
                     errorGuides.forEachIndexed { index, (name, trigger, recovery) ->
                         Column {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                LiquidGlassPill(tint = AzurePrimary, cornerRadius = 6.dp) {
-                                    Text(name, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AzurePrimary)
+                                LiquidGlassPill(tint = ElectricCyan, cornerRadius = 6.dp) {
+                                    Text(name, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = ElectricCyan)
                                 }
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("Triggers: $trigger", fontSize = 11.sp, color = AzureOnSurfaceVariant)
-                            Text("Recovery: $recovery", fontSize = 11.sp, color = AzureOnSurface)
+                            Text("Triggers: $trigger", fontSize = 11.sp, color = TextMuted)
+                            Text("Recovery: $recovery", fontSize = 11.sp, color = TextPrimary)
                         }
                         if (index < errorGuides.size - 1) {
                             HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = Color(0x18FFFFFF))
@@ -178,6 +192,8 @@ fun DiagnosticsScreen(
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

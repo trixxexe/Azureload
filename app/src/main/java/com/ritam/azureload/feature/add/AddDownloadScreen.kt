@@ -29,6 +29,7 @@ import com.ritam.azureload.feature.dashboard.formatSpeed
 import com.ritam.azureload.ui.components.LiquidGlassButton
 import com.ritam.azureload.ui.components.LiquidGlassCard
 import com.ritam.azureload.ui.components.LiquidGlassErrorCard
+import com.ritam.azureload.ui.components.LiquidGlassIconButton
 import com.ritam.azureload.ui.components.LiquidGlassPill
 import com.ritam.azureload.ui.theme.*
 import kotlinx.coroutines.launch
@@ -98,19 +99,30 @@ fun AddDownloadScreen(
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                title = { Text("Add Download", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = AzureOnSurface,
-                    navigationIconContentColor = AzureOnSurface
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 18.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LiquidGlassIconButton(
+                    onClick = onBack,
+                    icon = Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    modifier = Modifier.size(40.dp)
                 )
-            )
+
+                Text(
+                    text = "Add Download",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = TextPrimary
+                )
+
+                Spacer(modifier = Modifier.size(40.dp))
+            }
         }
     ) { padding ->
         Column(
@@ -118,17 +130,17 @@ fun AddDownloadScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(scrollState)
-                .padding(16.dp),
+                .padding(horizontal = 18.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Source URL Card
-            LiquidGlassCard(cornerRadius = 20.dp) {
+            LiquidGlassCard(cornerRadius = 22.dp) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Text(
-                        text = "Source Link",
+                        text = "Source URL",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        color = AzurePrimary,
+                        color = ElectricCyan,
                         letterSpacing = 0.5.sp
                     )
                     Spacer(modifier = Modifier.height(10.dp))
@@ -136,7 +148,7 @@ fun AddDownloadScreen(
                         value = url,
                         onValueChange = { url = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("https://example.com/file.zip", color = AzureOnSurfaceVariant, fontSize = 13.sp) },
+                        placeholder = { Text("https://example.com/file.zip", color = TextMuted, fontSize = 13.sp) },
                         trailingIcon = {
                             IconButton(onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -146,16 +158,18 @@ fun AddDownloadScreen(
                                     inspectUrl()
                                 }
                             }) {
-                                Icon(Icons.Default.ContentPaste, contentDescription = "Paste", tint = AzurePrimary)
+                                Icon(Icons.Default.ContentPaste, contentDescription = "Paste", tint = ElectricCyan)
                             }
                         },
                         singleLine = true,
-                        shape = SquircleShape(12.dp),
+                        shape = SquircleShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = Color(0x10FFFFFF),
-                            focusedContainerColor = Color(0x1EFFFFFF),
-                            unfocusedBorderColor = Color(0x25FFFFFF),
-                            focusedBorderColor = AzurePrimary
+                            unfocusedContainerColor = Color(0x14FFFFFF),
+                            focusedContainerColor = Color(0x22FFFFFF),
+                            unfocusedBorderColor = Color(0x20FFFFFF),
+                            focusedBorderColor = ElectricCyan,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
                         )
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -165,13 +179,13 @@ fun AddDownloadScreen(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = url.isNotBlank() && !isInspecting,
                         isSolid = true,
-                        accentColor = AzurePrimary,
+                        accentColor = ElectricCyan,
                         cornerRadius = 14.dp
                     ) {
                         if (isInspecting) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = PureBlack)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Probing Server Capabilities...", color = PureBlack, fontWeight = FontWeight.SemiBold)
+                            Text("Probing Server...", color = PureBlack, fontWeight = FontWeight.SemiBold)
                         } else {
                             Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp), tint = PureBlack)
                             Spacer(modifier = Modifier.width(8.dp))
@@ -193,27 +207,27 @@ fun AddDownloadScreen(
                     )
                 } else capabilityResult?.let { cap ->
                     LiquidGlassCard(
-                        cornerRadius = 18.dp,
+                        cornerRadius = 20.dp,
                         isHighlighted = true,
-                        highlightColor = if (cap.supportsRange) AzureSuccess else AzureSecondary
+                        highlightColor = if (cap.supportsRange) AuroraEmerald else VibrantAzure
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 LiquidGlassPill(
-                                    tint = if (cap.supportsRange) AzureSuccess else AzureSecondary,
+                                    tint = if (cap.supportsRange) AuroraEmerald else VibrantAzure,
                                     cornerRadius = 8.dp
                                 ) {
                                     Icon(
                                         imageVector = if (cap.supportsRange) Icons.Default.Speed else Icons.Default.Info,
                                         contentDescription = null,
-                                        tint = if (cap.supportsRange) AzureSuccess else AzureSecondary,
+                                        tint = if (cap.supportsRange) AuroraEmerald else VibrantAzure,
                                         modifier = Modifier.size(14.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = if (cap.supportsRange) "Byte-Range Supported (Multi-connection enabled)" else "Single Connection (Ranges unsupported)",
+                                        text = if (cap.supportsRange) "Byte-Range Supported (Multi-Stream Ready)" else "Single Connection (No Ranges)",
                                         fontWeight = FontWeight.Bold,
-                                        color = if (cap.supportsRange) AzureSuccess else AzureSecondary,
+                                        color = if (cap.supportsRange) AuroraEmerald else VibrantAzure,
                                         fontSize = 12.sp
                                     )
                                 }
@@ -223,13 +237,13 @@ fun AddDownloadScreen(
                                 text = "Detected Size: " + (if (cap.contentLength > 0) formatBytes(cap.contentLength) else "Unknown (Dynamic stream)"),
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = AzureOnSurface
+                                color = TextPrimary
                             )
                             if (cap.eTag != null) {
-                                Text(text = "ETag: ${cap.eTag}", fontSize = 11.sp, color = AzureOnSurfaceVariant)
+                                Text(text = "ETag: ${cap.eTag}", fontSize = 11.sp, color = TextSecondary)
                             }
                             if (cap.contentType != null) {
-                                Text(text = "MIME: ${cap.contentType}", fontSize = 11.sp, color = AzureOnSurfaceVariant)
+                                Text(text = "MIME: ${cap.contentType}", fontSize = 11.sp, color = TextSecondary)
                             }
                         }
                     }
@@ -237,36 +251,38 @@ fun AddDownloadScreen(
             }
 
             // Filename Input
-            LiquidGlassCard(cornerRadius = 18.dp) {
+            LiquidGlassCard(cornerRadius = 20.dp) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Target File Name", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AzurePrimary)
+                    Text("Target File Name", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ElectricCyan)
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = fileName,
                         onValueChange = { fileName = it },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        placeholder = { Text("e.g. document.pdf", color = AzureOnSurfaceVariant, fontSize = 13.sp) },
-                        shape = SquircleShape(12.dp),
+                        placeholder = { Text("e.g. document.pdf", color = TextMuted, fontSize = 13.sp) },
+                        shape = SquircleShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = Color(0x10FFFFFF),
-                            focusedContainerColor = Color(0x1EFFFFFF),
-                            unfocusedBorderColor = Color(0x25FFFFFF),
-                            focusedBorderColor = AzurePrimary
+                            unfocusedContainerColor = Color(0x14FFFFFF),
+                            focusedContainerColor = Color(0x22FFFFFF),
+                            unfocusedBorderColor = Color(0x20FFFFFF),
+                            focusedBorderColor = ElectricCyan,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
                         )
                     )
                 }
             }
 
             // Concurrency Slider
-            LiquidGlassCard(cornerRadius = 18.dp) {
+            LiquidGlassCard(cornerRadius = 20.dp) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Concurrency Connections", fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
-                        Text("${concurrency.toInt()} Threads", fontWeight = FontWeight.Bold, color = NeonCyan)
+                        Text("Parallel Connections", fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Text("${concurrency.toInt()} Streams", fontWeight = FontWeight.Bold, color = ElectricCyan)
                     }
                     Slider(
                         value = concurrency,
@@ -274,31 +290,50 @@ fun AddDownloadScreen(
                         valueRange = 1f..16f,
                         steps = 14,
                         colors = SliderDefaults.colors(
-                            thumbColor = NeonCyan,
-                            activeTrackColor = AzurePrimary
+                            thumbColor = ElectricCyan,
+                            activeTrackColor = VibrantAzure
                         )
                     )
-                    Text(
-                        text = "Divides known-size files into non-overlapping byte ranges. Conservative default is 4 threads.",
-                        fontSize = 11.sp,
-                        color = AzureOnSurfaceVariant
-                    )
+
+                    // Presets
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(2, 4, 8, 16).forEach { count ->
+                            val isSelected = concurrency.toInt() == count
+                            LiquidGlassPill(
+                                tint = if (isSelected) ElectricCyan else null,
+                                isSolid = isSelected,
+                                cornerRadius = 8.dp,
+                                onClick = { concurrency = count.toFloat() },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(
+                                    text = "${count}x",
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) PureBlack else TextPrimary
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
             // Speed Throttle Option Card
-            LiquidGlassCard(cornerRadius = 18.dp) {
+            LiquidGlassCard(cornerRadius = 20.dp) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Download Speed Throttle", fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
+                        Text("Speed Limit", fontWeight = FontWeight.SemiBold, color = TextPrimary)
                         Text(
                             text = if (speedLimitBytes > 0) formatSpeed(speedLimitBytes) else "Unlimited",
                             fontWeight = FontWeight.Bold,
-                            color = if (speedLimitBytes > 0) AzureSecondary else AzurePrimary
+                            color = if (speedLimitBytes > 0) SolarWarning else ElectricCyan
                         )
                     }
                     Spacer(modifier = Modifier.height(10.dp))
@@ -318,7 +353,7 @@ fun AddDownloadScreen(
                         presets.forEach { (label, bytes) ->
                             val isSelected = speedLimitBytes == bytes
                             LiquidGlassPill(
-                                tint = if (isSelected) AzurePrimary else null,
+                                tint = if (isSelected) ElectricCyan else null,
                                 isSolid = isSelected,
                                 cornerRadius = 10.dp,
                                 onClick = { speedLimitBytes = bytes }
@@ -327,7 +362,7 @@ fun AddDownloadScreen(
                                     text = label,
                                     fontSize = 11.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) PureBlack else AzureOnSurface
+                                    color = if (isSelected) PureBlack else TextPrimary
                                 )
                             }
                         }
@@ -336,45 +371,49 @@ fun AddDownloadScreen(
             }
 
             // Advanced: Custom Headers
-            LiquidGlassCard(cornerRadius = 18.dp) {
+            LiquidGlassCard(cornerRadius = 20.dp) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Custom Headers (Optional)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AzurePrimary)
+                    Text("Custom Headers (Optional)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ElectricCyan)
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = customHeadersText,
                         onValueChange = { customHeadersText = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Authorization: Bearer xyz\nCookie: session=123", color = AzureOnSurfaceVariant, fontSize = 12.sp) },
+                        placeholder = { Text("Authorization: Bearer xyz\nCookie: session=123", color = TextMuted, fontSize = 12.sp) },
                         minLines = 2,
                         maxLines = 4,
-                        shape = SquircleShape(12.dp),
+                        shape = SquircleShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = Color(0x10FFFFFF),
-                            focusedContainerColor = Color(0x1EFFFFFF),
-                            unfocusedBorderColor = Color(0x25FFFFFF),
-                            focusedBorderColor = AzurePrimary
+                            unfocusedContainerColor = Color(0x14FFFFFF),
+                            focusedContainerColor = Color(0x22FFFFFF),
+                            unfocusedBorderColor = Color(0x20FFFFFF),
+                            focusedBorderColor = ElectricCyan,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
                         )
                     )
                 }
             }
 
             // Advanced: Expected SHA-256
-            LiquidGlassCard(cornerRadius = 18.dp) {
+            LiquidGlassCard(cornerRadius = 20.dp) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Expected SHA-256 Checksum (Optional)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AzurePrimary)
+                    Text("Expected SHA-256 (Optional)", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ElectricCyan)
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = expectedSha256,
                         onValueChange = { expectedSha256 = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("e.g. e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", color = AzureOnSurfaceVariant, fontSize = 11.sp) },
+                        placeholder = { Text("e.g. e3b0c44298fc1c149afbf4c8996fb92427ae...", color = TextMuted, fontSize = 11.sp) },
                         singleLine = true,
-                        shape = SquircleShape(12.dp),
+                        shape = SquircleShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedContainerColor = Color(0x10FFFFFF),
-                            focusedContainerColor = Color(0x1EFFFFFF),
-                            unfocusedBorderColor = Color(0x25FFFFFF),
-                            focusedBorderColor = AzurePrimary
+                            unfocusedContainerColor = Color(0x14FFFFFF),
+                            focusedContainerColor = Color(0x22FFFFFF),
+                            unfocusedBorderColor = Color(0x20FFFFFF),
+                            focusedBorderColor = ElectricCyan,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
                         )
                     )
                 }
@@ -402,12 +441,14 @@ fun AddDownloadScreen(
                 cornerRadius = 16.dp,
                 enabled = url.isNotBlank(),
                 isSolid = true,
-                accentColor = AzurePrimary
+                accentColor = ElectricCyan
             ) {
                 Icon(Icons.Default.Download, contentDescription = null, tint = PureBlack, modifier = Modifier.size(20.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Start Download", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = PureBlack)
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }

@@ -19,6 +19,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ritam.azureload.core.settings.SettingsManager
 import com.ritam.azureload.feature.dashboard.formatSpeed
 import com.ritam.azureload.ui.components.LiquidGlassCard
+import com.ritam.azureload.ui.components.LiquidGlassIconButton
 import com.ritam.azureload.ui.components.LiquidGlassPill
 import com.ritam.azureload.ui.theme.*
 
@@ -36,19 +37,30 @@ fun SettingsScreen(
     Scaffold(
         containerColor = Color.Transparent,
         topBar = {
-            TopAppBar(
-                title = { Text("Settings", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = AzureOnSurface,
-                    navigationIconContentColor = AzureOnSurface
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 18.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LiquidGlassIconButton(
+                    onClick = onBack,
+                    icon = Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    modifier = Modifier.size(40.dp)
                 )
-            )
+
+                Text(
+                    text = "Settings",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = TextPrimary
+                )
+
+                Spacer(modifier = Modifier.size(40.dp))
+            }
         }
     ) { padding ->
         Column(
@@ -56,7 +68,7 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(horizontal = 18.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Network & Concurrency
@@ -64,13 +76,11 @@ fun SettingsScreen(
                 text = "Network & Concurrency",
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
-                color = AzurePrimary,
+                color = ElectricCyan,
                 letterSpacing = 0.5.sp
             )
 
-            LiquidGlassCard(
-                cornerRadius = 20.dp
-            ) {
+            LiquidGlassCard(cornerRadius = 22.dp) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -78,15 +88,15 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Only download over Wi-Fi", fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
-                            Text("Prevent transfers on cellular data", fontSize = 12.sp, color = AzureOnSurfaceVariant)
+                            Text("Only download over Wi-Fi", fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                            Text("Prevent transfers on cellular data", fontSize = 12.sp, color = TextSecondary)
                         }
                         Switch(
                             checked = wifiOnly,
                             onCheckedChange = { settingsManager.setWifiOnly(it) },
                             colors = SwitchDefaults.colors(
                                 checkedThumbColor = PureBlack,
-                                checkedTrackColor = AzurePrimary
+                                checkedTrackColor = ElectricCyan
                             )
                         )
                     }
@@ -97,8 +107,8 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Default Concurrency", fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
-                        Text("$defaultConcurrency Threads", fontWeight = FontWeight.Bold, color = NeonCyan)
+                        Text("Default Concurrency", fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Text("$defaultConcurrency Streams", fontWeight = FontWeight.Bold, color = ElectricCyan)
                     }
                     Slider(
                         value = defaultConcurrency.toFloat(),
@@ -106,11 +116,11 @@ fun SettingsScreen(
                         valueRange = 1f..16f,
                         steps = 14,
                         colors = SliderDefaults.colors(
-                            thumbColor = NeonCyan,
-                            activeTrackColor = AzurePrimary
+                            thumbColor = ElectricCyan,
+                            activeTrackColor = VibrantAzure
                         )
                     )
-                    Text("Multi-connection range threads allocated per new download.", fontSize = 11.sp, color = AzureOnSurfaceVariant)
+                    Text("Parallel range streams allocated per new download.", fontSize = 11.sp, color = TextMuted)
 
                     HorizontalDivider(modifier = Modifier.padding(vertical = 14.dp), color = Color(0x18FFFFFF))
 
@@ -118,8 +128,8 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Max Concurrent Active Transfers", fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
-                        Text("$maxActiveTransfers Active", fontWeight = FontWeight.Bold, color = NeonCyan)
+                        Text("Max Concurrent Active Transfers", fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Text("$maxActiveTransfers Active", fontWeight = FontWeight.Bold, color = ElectricCyan)
                     }
                     Slider(
                         value = maxActiveTransfers.toFloat(),
@@ -127,11 +137,11 @@ fun SettingsScreen(
                         valueRange = 1f..6f,
                         steps = 4,
                         colors = SliderDefaults.colors(
-                            thumbColor = NeonCyan,
-                            activeTrackColor = AzurePrimary
+                            thumbColor = ElectricCyan,
+                            activeTrackColor = VibrantAzure
                         )
                     )
-                    Text("Maximum transfers running concurrently. Additional downloads wait in QUEUED state.", fontSize = 11.sp, color = AzureOnSurfaceVariant)
+                    Text("Transfers exceeding this limit wait in QUEUED state.", fontSize = 11.sp, color = TextMuted)
                 }
             }
 
@@ -140,13 +150,11 @@ fun SettingsScreen(
                 text = "Bandwidth & Speed Limits",
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
-                color = AzurePrimary,
+                color = ElectricCyan,
                 letterSpacing = 0.5.sp
             )
 
-            LiquidGlassCard(
-                cornerRadius = 20.dp
-            ) {
+            LiquidGlassCard(cornerRadius = 22.dp) {
                 Column(modifier = Modifier.padding(18.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -154,14 +162,14 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Speed, contentDescription = null, tint = AzurePrimary, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.Speed, contentDescription = null, tint = ElectricCyan, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Global Download Speed Limit", fontWeight = FontWeight.SemiBold, color = AzureOnSurface)
+                            Text("Global Speed Limit", fontWeight = FontWeight.SemiBold, color = TextPrimary)
                         }
                         Text(
                             text = if (globalSpeedLimit > 0) formatSpeed(globalSpeedLimit) else "Unlimited",
                             fontWeight = FontWeight.Bold,
-                            color = if (globalSpeedLimit > 0) AzureSecondary else AzurePrimary
+                            color = if (globalSpeedLimit > 0) SolarWarning else ElectricCyan
                         )
                     }
                     Spacer(modifier = Modifier.height(12.dp))
@@ -183,7 +191,7 @@ fun SettingsScreen(
                         limits.forEach { (label, bytes) ->
                             val isSelected = globalSpeedLimit == bytes
                             LiquidGlassPill(
-                                tint = if (isSelected) AzurePrimary else null,
+                                tint = if (isSelected) ElectricCyan else null,
                                 isSolid = isSelected,
                                 cornerRadius = 12.dp,
                                 onClick = { settingsManager.setGlobalSpeedLimit(bytes) }
@@ -192,16 +200,16 @@ fun SettingsScreen(
                                     text = label,
                                     fontSize = 11.sp,
                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (isSelected) PureBlack else AzureOnSurface
+                                    color = if (isSelected) PureBlack else TextPrimary
                                 )
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Applies across all active transfers simultaneously to preserve Wi-Fi/cellular bandwidth.",
+                        text = "Applies across all active transfers simultaneously to preserve bandwidth.",
                         fontSize = 11.sp,
-                        color = AzureOnSurfaceVariant
+                        color = TextMuted
                     )
                 }
             }
@@ -211,27 +219,27 @@ fun SettingsScreen(
                 text = "About Azureload",
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
-                color = AzurePrimary,
+                color = ElectricCyan,
                 letterSpacing = 0.5.sp
             )
 
-            LiquidGlassCard(
-                cornerRadius = 20.dp
-            ) {
+            LiquidGlassCard(cornerRadius = 22.dp) {
                 Column(modifier = Modifier.padding(18.dp)) {
-                    Text("Azureload Liquid Glass", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = AzureOnSurface)
+                    Text("Azureload Liquid Glass", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = TextPrimary)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("Version 1.0.0 (Build 1) • Production Release", fontSize = 12.sp, color = AzureOnSurfaceVariant)
+                    Text("Version 1.0.0 • iOS Liquid Glass Edition", fontSize = 12.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Desktop-grade multi-connection accelerator featuring G2 continuous-curvature Liquid Glass UI, structured error recovery, and strict mobile lifecycle management.",
-                        fontSize = 13.sp,
-                        color = AzureOnSurface
+                        "Multi-connection download accelerator featuring continuous G2 superellipse curves, radiant liquid glass materials, and mobile lifecycle safeguards.",
+                        fontSize = 12.sp,
+                        color = TextPrimary
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Package: com.ritam.azureload", fontSize = 11.sp, color = AzureOnSurfaceVariant)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("Package: com.ritam.azureload", fontSize = 11.sp, color = TextMuted)
                 }
             }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
