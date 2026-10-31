@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -44,14 +45,11 @@ fun LiquidGlassBackdrop(
         modifier = modifier
             .fillMaxSize()
             .background(CosmicVoid)
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
+            .drawWithCache {
+                val w = size.width
+                val h = size.height
 
-            // Top-left luminous Electric Cyan / Azure orb
-            drawCircle(
-                brush = Brush.radialGradient(
+                val orb1 = Brush.radialGradient(
                     colors = listOf(
                         ElectricCyan.copy(alpha = 0.20f),
                         VibrantAzure.copy(alpha = 0.09f),
@@ -60,11 +58,8 @@ fun LiquidGlassBackdrop(
                     center = Offset(w * 0.12f, h * 0.10f),
                     radius = (w * 0.80f).coerceAtLeast(320f)
                 )
-            )
 
-            // Top-right luminous Cyber Violet / Neon Magenta orb
-            drawCircle(
-                brush = Brush.radialGradient(
+                val orb2 = Brush.radialGradient(
                     colors = listOf(
                         NeonMagenta.copy(alpha = 0.16f),
                         CyberViolet.copy(alpha = 0.10f),
@@ -73,11 +68,8 @@ fun LiquidGlassBackdrop(
                     center = Offset(w * 0.90f, h * 0.28f),
                     radius = (w * 0.75f).coerceAtLeast(300f)
                 )
-            )
 
-            // Center-left subtle warm Solar Gold glow
-            drawCircle(
-                brush = Brush.radialGradient(
+                val orb3 = Brush.radialGradient(
                     colors = listOf(
                         SolarGold.copy(alpha = 0.08f),
                         SunsetCoral.copy(alpha = 0.04f),
@@ -86,11 +78,8 @@ fun LiquidGlassBackdrop(
                     center = Offset(w * 0.10f, h * 0.58f),
                     radius = (w * 0.60f).coerceAtLeast(240f)
                 )
-            )
 
-            // Bottom-center luminous Mint Teal glow
-            drawCircle(
-                brush = Brush.radialGradient(
+                val orb4 = Brush.radialGradient(
                     colors = listOf(
                         MintTeal.copy(alpha = 0.12f),
                         AuroraEmerald.copy(alpha = 0.05f),
@@ -99,11 +88,16 @@ fun LiquidGlassBackdrop(
                     center = Offset(w * 0.50f, h * 0.85f),
                     radius = (w * 0.70f).coerceAtLeast(280f)
                 )
-            )
-        }
 
-        content()
-    }
+                onDrawBehind {
+                    drawCircle(brush = orb1, center = Offset(w * 0.12f, h * 0.10f), radius = (w * 0.80f).coerceAtLeast(320f))
+                    drawCircle(brush = orb2, center = Offset(w * 0.90f, h * 0.28f), radius = (w * 0.75f).coerceAtLeast(300f))
+                    drawCircle(brush = orb3, center = Offset(w * 0.10f, h * 0.58f), radius = (w * 0.60f).coerceAtLeast(240f))
+                    drawCircle(brush = orb4, center = Offset(w * 0.50f, h * 0.85f), radius = (w * 0.70f).coerceAtLeast(280f))
+                }
+            },
+        content = content
+    )
 }
 
 /**

@@ -115,11 +115,13 @@ fun DashboardScreen(
                 }
             }
             .sortedWith { a, b ->
+                val aSize = if (a.totalBytes > 0) a.totalBytes else a.downloadedBytes
+                val bSize = if (b.totalBytes > 0) b.totalBytes else b.downloadedBytes
                 when (selectedSort) {
                     SortOption.DATE_DESC -> b.createdAt.compareTo(a.createdAt)
                     SortOption.DATE_ASC -> a.createdAt.compareTo(b.createdAt)
-                    SortOption.SIZE_DESC -> b.totalBytes.compareTo(a.totalBytes)
-                    SortOption.SIZE_ASC -> a.totalBytes.compareTo(b.totalBytes)
+                    SortOption.SIZE_DESC -> bSize.compareTo(aSize)
+                    SortOption.SIZE_ASC -> aSize.compareTo(bSize)
                     SortOption.NAME_ASC -> a.fileName.compareTo(b.fileName, ignoreCase = true)
                 }
             }
@@ -360,7 +362,9 @@ fun DashboardScreen(
                             text = "$tabTitle ($tabCount)",
                             fontSize = 11.sp,
                             fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                            color = if (isSelected) PureBlack else TextSecondary
+                            color = if (isSelected) PureBlack else TextSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -403,6 +407,7 @@ fun DashboardScreen(
 
             // Main Download Transfer List
             if (filteredList.isEmpty()) {
+                val isFiltered = searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL || selectedTab != FilterTab.ALL
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -426,7 +431,7 @@ fun DashboardScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) Icons.Default.SearchOff else Icons.Default.FileDownload,
+                                    imageVector = if (isFiltered) Icons.Default.SearchOff else Icons.Default.FileDownload,
                                     contentDescription = null,
                                     modifier = Modifier.size(32.dp),
                                     tint = ElectricCyan
@@ -434,18 +439,18 @@ fun DashboardScreen(
                             }
                             Spacer(modifier = Modifier.height(14.dp))
                             Text(
-                                text = if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) "No matching transfers" else "No transfers yet",
+                                text = if (isFiltered) "No matching transfers" else "No transfers yet",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 color = TextPrimary
                             )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) "Try adjusting your search terms or filters" else "Tap + in the dock below to accelerate a file",
+                                text = if (isFiltered) "No transfers match your current filter or search criteria." else "Tap + in the dock below to accelerate a file",
                                 fontSize = 12.sp,
                                 color = TextSecondary
                             )
-                            if (searchQuery.isNotBlank() || selectedCategory != FileCategory.ALL) {
+                            if (isFiltered) {
                                 Spacer(modifier = Modifier.height(14.dp))
                                 LiquidGlassButton(
                                     onClick = {
@@ -458,6 +463,18 @@ fun DashboardScreen(
                                     cornerRadius = 10.dp
                                 ) {
                                     Text("Reset Filters", color = PureBlack, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
+                            } else if (downloads.isEmpty()) {
+                                Spacer(modifier = Modifier.height(14.dp))
+                                LiquidGlassButton(
+                                    onClick = onNavigateToAdd,
+                                    isSolid = true,
+                                    accentColor = ElectricCyan,
+                                    cornerRadius = 12.dp
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, tint = PureBlack, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Add Transfer", color = PureBlack, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 }
                             }
                         }
@@ -624,10 +641,17 @@ fun DownloadCard(
                         text = when (item.status) {
                             DownloadStatus.DOWNLOADING -> {
                                 val speedText = if (speed > 0) " • ${formatSpeed(speed)}" else ""
-                                "${visuals.categoryLabel} • ${formatBytes(item.downloadedBytes)} / ${formatBytes(item.totalBytes)}$speedText"
+                                val totalStr = if (item.totalBytes > 0) formatBytes(item.totalBytes) else "Unknown"
+                                "${visuals.categoryLabel} • ${formatBytes(item.downloadedBytes)} / $totalStr$speedText"
                             }
-                            DownloadStatus.COMPLETED -> "${visuals.categoryLabel} • ${formatBytes(item.totalBytes)} • Completed"
-                            DownloadStatus.PAUSED -> "${visuals.categoryLabel} • ${formatBytes(item.downloadedBytes)} / ${formatBytes(item.totalBytes)} • Paused"
+                            DownloadStatus.COMPLETED -> {
+                                val totalStr = if (item.totalBytes > 0) formatBytes(item.totalBytes) else formatBytes(item.downloadedBytes)
+                                "${visuals.categoryLabel} • $totalStr • Completed"
+                            }
+                            DownloadStatus.PAUSED -> {
+                                val totalStr = if (item.totalBytes > 0) formatBytes(item.totalBytes) else "Unknown"
+                                "${visuals.categoryLabel} • ${formatBytes(item.downloadedBytes)} / $totalStr • Paused"
+                            }
                             DownloadStatus.FAILED -> "${visuals.categoryLabel} • Interrupted • Tap for diagnosis"
                             else -> "${visuals.categoryLabel} • ${item.status.name.lowercase().replaceFirstChar { it.uppercase() }}"
                         },
@@ -775,6 +799,7 @@ fun DownloadCard(
 }
 
 fun formatBytes(bytes: Long): String {
+    if (bytes <= 0) return "0 B"
     if (bytes < 1024) return "$bytes B"
     val kb = bytes / 1024.0
     if (kb < 1024) return String.format(java.util.Locale.US, "%.1f KB", kb)

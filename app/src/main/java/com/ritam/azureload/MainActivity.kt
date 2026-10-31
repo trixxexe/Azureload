@@ -16,9 +16,18 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
@@ -268,17 +277,23 @@ class MainActivity : ComponentActivity() {
                         }
 
                         // Floating iOS Liquid Glass Dock
-                        val isDockVisible = currentRoute == Screen.Dashboard.route ||
+                        @OptIn(ExperimentalLayoutApi::class)
+                        val isKeyboardOpen = WindowInsets.isImeVisible
+                        val isDockVisible = !isKeyboardOpen && (
+                                currentRoute == Screen.Dashboard.route ||
                                 currentRoute == Screen.Settings.route ||
-                                currentRoute == Screen.Diagnostics.route ||
-                                currentRoute?.startsWith("add") == true
+                                currentRoute == Screen.Diagnostics.route
+                        )
 
-                        if (isDockVisible) {
-                            val activeTab = when {
-                                currentRoute == Screen.Dashboard.route -> DockTab.TRANSFERS
-                                currentRoute == Screen.Settings.route -> DockTab.SETTINGS
-                                currentRoute == Screen.Diagnostics.route -> DockTab.HEALTH
-                                currentRoute?.startsWith("add") == true -> DockTab.ADD
+                        AnimatedVisibility(
+                            visible = isDockVisible,
+                            enter = fadeIn(tween(220)) + slideInVertically(tween(250)) { it / 2 },
+                            exit = fadeOut(tween(180)) + slideOutVertically(tween(200)) { it / 2 },
+                            modifier = Modifier.align(Alignment.BottomCenter)
+                        ) {
+                            val activeTab = when (currentRoute) {
+                                Screen.Settings.route -> DockTab.SETTINGS
+                                Screen.Diagnostics.route -> DockTab.HEALTH
                                 else -> DockTab.TRANSFERS
                             }
 
@@ -289,32 +304,41 @@ class MainActivity : ComponentActivity() {
                                         DockTab.TRANSFERS -> {
                                             if (currentRoute != Screen.Dashboard.route) {
                                                 navController.navigate(Screen.Dashboard.route) {
-                                                    popUpTo(Screen.Dashboard.route) { inclusive = false }
+                                                    popUpTo(Screen.Dashboard.route) { inclusive = true }
                                                     launchSingleTop = true
                                                 }
                                             }
                                         }
                                         DockTab.BROWSER -> {
-                                            navController.navigate(Screen.Browser.createRoute())
+                                            navController.navigate(Screen.Browser.createRoute()) {
+                                                launchSingleTop = true
+                                            }
                                         }
                                         DockTab.ADD -> {
-                                            if (currentRoute?.startsWith("add") != true) {
-                                                navController.navigate(Screen.Add.createRoute())
+                                            navController.navigate(Screen.Add.createRoute()) {
+                                                launchSingleTop = true
                                             }
                                         }
                                         DockTab.HEALTH -> {
                                             if (currentRoute != Screen.Diagnostics.route) {
-                                                navController.navigate(Screen.Diagnostics.route)
+                                                navController.navigate(Screen.Diagnostics.route) {
+                                                    popUpTo(Screen.Dashboard.route) { saveState = true }
+                                                    launchSingleTop = true
+                                                    restoreState = true
+                                                }
                                             }
                                         }
                                         DockTab.SETTINGS -> {
                                             if (currentRoute != Screen.Settings.route) {
-                                                navController.navigate(Screen.Settings.route)
+                                                navController.navigate(Screen.Settings.route) {
+                                                    popUpTo(Screen.Dashboard.route) { saveState = true }
+                                                    launchSingleTop = true
+                                                    restoreState = true
+                                                }
                                             }
                                         }
                                     }
-                                },
-                                modifier = Modifier.align(Alignment.BottomCenter)
+                                }
                             )
                         }
                     }

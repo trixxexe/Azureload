@@ -146,6 +146,7 @@ fun DetailScreen(
                 val secs = seconds % 60
                 if (mins > 60) "${mins / 60}h ${mins % 60}m" else "${mins}m ${secs}s"
             }
+            totalBytes <= 0 && download.status == DownloadStatus.DOWNLOADING -> "Unknown"
             else -> "Calculating..."
         }
 
@@ -337,12 +338,21 @@ fun DetailScreen(
                                 fontWeight = FontWeight.SemiBold,
                                 color = TextPrimary
                             )
-                            Text(
-                                text = "${(progress * 100).toInt()}%",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = ElectricCyan
-                            )
+                            if (totalBytes > 0) {
+                                Text(
+                                    text = "${(progress * 100).toInt()}%",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = ElectricCyan
+                                )
+                            } else if (download.status == DownloadStatus.DOWNLOADING) {
+                                Text(
+                                    text = "Streaming",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ElectricCyan
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
@@ -842,6 +852,12 @@ fun DetailScreen(
                     Button(
                         onClick = {
                             showDeleteConfirmDialog = false
+                            if (deleteFileOnDisk && download.destinationPath.isNotBlank()) {
+                                try {
+                                    val f = File(download.destinationPath)
+                                    if (f.exists()) f.delete()
+                                } catch (_: Exception) {}
+                            }
                             onCancel(download.id)
                             onBack()
                         },

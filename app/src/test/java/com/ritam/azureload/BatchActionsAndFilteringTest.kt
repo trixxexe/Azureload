@@ -9,6 +9,7 @@ import com.ritam.azureload.fakes.FakeChunkDao
 import com.ritam.azureload.fakes.FakeDownloadDao
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import com.ritam.azureload.feature.dashboard.formatBytes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -178,5 +179,32 @@ class BatchActionsAndFilteringTest {
         // Verifies no queued jobs remain to be erroneously picked up
         val remainingPending = repository.getActiveOrPendingDownloads()
         assertEquals(0, remainingPending.size)
+    }
+
+    @Test
+    fun testFormatBytesDefensiveHandling() {
+        assertEquals("0 B", formatBytes(-1L))
+        assertEquals("0 B", formatBytes(0L))
+        assertEquals("512 B", formatBytes(512L))
+        assertEquals("1.0 KB", formatBytes(1024L))
+        assertEquals("1.5 MB", formatBytes((1.5 * 1024 * 1024).toLong()))
+        assertEquals("2.00 GB", formatBytes((2.0 * 1024 * 1024 * 1024).toLong()))
+    }
+
+    @Test
+    fun testSortingBySizeWithUnknownTotalBytes() {
+        val item1 = DownloadItem(id = 1, url = "https://example.com/stream.bin", destinationPath = "", stagingPath = "", fileName = "stream.bin", totalBytes = -1L, downloadedBytes = 500L * 1024 * 1024)
+        val item2 = DownloadItem(id = 2, url = "https://example.com/small.zip", destinationPath = "", stagingPath = "", fileName = "small.zip", totalBytes = 50L * 1024 * 1024, downloadedBytes = 50L * 1024 * 1024)
+        val item3 = DownloadItem(id = 3, url = "https://example.com/tiny.txt", destinationPath = "", stagingPath = "", fileName = "tiny.txt", totalBytes = 1024L, downloadedBytes = 1024L)
+
+        val list = listOf(item2, item1, item3)
+
+        val sortedDesc = list.sortedWith { a, b ->
+            val aSize = if (a.totalBytes > 0) a.totalBytes else a.downloadedBytes
+            val bSize = if (b.totalBytes > 0) b.totalBytes else b.downloadedBytes
+            bSize.compareTo(aSize)
+        }
+
+        assertEquals(listOf(1L, 2L, 3L), sortedDesc.map { it.id })
     }
 }
